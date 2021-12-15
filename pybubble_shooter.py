@@ -1,6 +1,7 @@
 import math
 import pygame
 import sys
+from enum import Enum, auto
 from pygame.locals import QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, KEYDOWN, MOUSEBUTTONDOWN, Rect
 from random import randint
 
@@ -35,6 +36,11 @@ FILES = {
     3: 'images/ball_purple.png',
     4: 'images/ball_red.png',
     5: 'images/ball_sky.png'}
+
+
+class BulletStatus(Enum):
+
+    pass
 
 
 class PyBubbleShooter:
@@ -93,10 +99,7 @@ class PyBubbleShooter:
             self.angle = 175
 
     def shoot(self):
-        x, y = self.get_coordinates(100)
-        self.bullet.rect.centerx = x
-        self.bullet.rect.centery = y
-
+        self.bullet.shoot(self.angle)
 
 
 class Bubble(pygame.sprite.Sprite):
@@ -122,10 +125,33 @@ class Bullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.centerx = x
         self.rect.centery = y
-        
-    def update(self):
-        pass
+        self.speed_x = None
+        self.speed_y = None
 
+    def round_up(self, value):
+        return int(math.copysign(math.ceil(abs(value)), value))
+
+    def shoot(self, angle):
+        x = 10 * math.cos(math.radians(angle))
+        y = 10 * math.sin(math.radians(angle))
+        self.speed_x = self.round_up(x)
+        self.speed_y = -self.round_up(y)
+
+    def update(self):
+        if self.speed_x:
+            self.rect.centerx += self.speed_x
+            self.rect.centery += self.speed_y
+            if self.rect.left < SCREEN.left:
+                self.rect.left = SCREEN.left
+                self.speed_x = -self.speed_x
+
+            if self.rect.right > SCREEN.right:
+                self.rect.right = SCREEN.right
+                self.speed_x = -self.speed_x
+
+            if self.rect.top < SCREEN.top:
+                self.rect.top = SCREEN.top
+                self.speed_y = -self.speed_y
 
 
 def main():
