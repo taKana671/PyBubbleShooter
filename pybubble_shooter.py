@@ -69,11 +69,12 @@ class PyBubbleShooter:
             y = Y_START_POS + BUBBLE_SIZE * row
             for col in range(20):
                 index = randint(0, 5)
+                # x = X_START_POS + BUBBLE_SIZE * col
                 x = x_start + BUBBLE_SIZE * col
                 bubble = Bubble(BUBBLES[index], x, y, row, col)
                 self.bubbles[row][col] = bubble
         index = randint(0, 5)
-        self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group)
+        self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
     def update(self):
         self.draw_arrow()
@@ -98,12 +99,12 @@ class PyBubbleShooter:
         return x, y
 
     def move_right(self):
-        self.angle -= 5
+        self.angle -= 2
         if self.angle < 5:
             self.angle = 5
 
     def move_left(self):
-        self.angle += 5
+        self.angle += 2
         if self.angle > 175:
             self.angle = 175
 
@@ -127,11 +128,11 @@ class Bubble(pygame.sprite.Sprite):
         self.speed_x = None
         self.speed_y = None
         self.color = bubble_kit.color
-        self.status = Status.STAY 
+        self.status = Status.STAY
 
     def move(self):
         self.speed_x = randint(-5, 5)
-        self.speed_y = randint(-5, 5)
+        self.speed_y = -10
 
     def update(self):
         if self.status == Status.MOVE:
@@ -152,7 +153,7 @@ class Bubble(pygame.sprite.Sprite):
 
 class Bullet(pygame.sprite.Sprite):
 
-    def __init__(self, bubble_kit, x, y, bubbles):
+    def __init__(self, bubble_kit, x, y, bubbles, shooter):
         super().__init__(self.containers)
         self.image = pygame.image.load(bubble_kit.file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (20, 20))
@@ -162,8 +163,12 @@ class Bullet(pygame.sprite.Sprite):
         self.status = Status.READY
         self.bubbles = bubbles
         self.color = bubble_kit.color
+        self.shooter = shooter
         self.speed_x = None
         self.speed_y = None
+        self.row = None
+        self.col = None
+
 
     def round_up(self, value):
         return int(math.copysign(math.ceil(abs(value)), value))
@@ -191,19 +196,53 @@ class Bullet(pygame.sprite.Sprite):
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
 
-            if collided_bubbles := pygame.sprite.spritecollide(self, self.bubbles, False):
-                self.speed_x = randint(-5, 5)
-                self.speed_y = -self.speed_y
+            if collided := pygame.sprite.spritecollide(self, self.bubbles, False):
+                print([(bubble.row, bubble.col) for bubble in collided])
+                collided.sort(key=lambda x: (x.row, x.col))
+                bubble = collided[0]
+                print(bubble.row, bubble.col)
+                # print(self.shooter.bubbles)
+                print(self.shooter.bubbles[bubble.row][bubble.col - 1])
 
-                for collided_bubble in collided_bubbles:
-                    print(collided_bubble.row, collided_bubble.col)
-                    collided_bubble.status = Status.MOVE
-                    collided_bubble.move()
+                if bubble.col > 0 and not self.shooter.bubbles[bubble.row][bubble.col - 1]:
+                    self.row = bubble.row
+                    self.col = bubble.col - 1
+                elif bubble.col < COLS - 1 and not self.shooter.bubbles[bubble.row][bubble.col + 1]:
+                    self.row = bubble.row
+                    self.col = bubble.col - 1
+                elif bubble.row < ROWS - 1:
+                    self.row = bubble.row + 1
+                    self.col = bubble.col
 
-    # def check_collide(self, collided_bubble):
-    #     for bubble in collided_bubble:
-    #         if bubble.collor == self.color:
-    #             yield bubble
+
+
+
+
+                self.shooter.bubbles[self.row][self.col]
+
+                if self.row % 2 == 0:
+                    x_start = X_START_POS
+                else:
+                    x_start = X_START_POS + BUBBLE_SIZE / 2
+                y = Y_START_POS + BUBBLE_SIZE * self.row
+                x = x_start + BUBBLE_SIZE * self.col
+                self.rect.centerx = x
+                self.rect.centery = y
+                self.bubbles.add(self)
+                self.status = Status.READY
+                
+    def check_color(self):
+        pass
+
+
+
+    def check_collide(self, collided_bubble):
+        for bubble in pygame.sprite.spritecollide(self, self.bubbles, False):
+            if bubble.color == self.color:
+                yield bubble
+
+    def destination(self):
+        pass
 
 
     # def check_matrix(self, bubble):
