@@ -49,16 +49,20 @@ class Status(Enum):
     READY = auto()
     STAY = auto()
     MOVE = auto()
+    CHARGE = auto()
+    SHOT = auto()
 
 
-class PyBubbleShooter:
+class Shooter:
 
     def __init__(self, screen, bubble_group):
         self.screen = screen
         self.angle = 90
         self.bubble_group = bubble_group
         self.bubbles = [[None for _ in range(COLS)] for _ in range(ROWS)]
-        self.create_bubbles()
+        self.create_bubbles(5)
+        self.status = Status.READY
+
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
@@ -73,11 +77,20 @@ class PyBubbleShooter:
                 x = x_start + BUBBLE_SIZE * col
                 bubble = Bubble(BUBBLES[index], x, y, row, col)
                 self.bubbles[row][col] = bubble
-        index = randint(0, 5)
-        self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
+        self.charge()
+        # index = randint(0, 5)
+        # self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
     def update(self):
         self.draw_arrow()
+        if self.status == Status.CHARGE:
+            self.charge()
+            self.status = Status.READY
+
+    def charge(self):
+        index = randint(0, 5)
+        # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
+        self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
     def draw_arrow(self):
         arrow_end = self.get_coordinates()
@@ -109,7 +122,9 @@ class PyBubbleShooter:
             self.angle = 175
 
     def shoot(self):
-        if self.bullet.status == Status.READY:
+        # if self.bullet.status == Status.READY:
+        if self.status == Status.READY:
+            self.status = Status.SHOT
             self.bullet.shoot(self.angle)
 
 
@@ -153,7 +168,10 @@ class Bubble(pygame.sprite.Sprite):
 
 class Bullet(pygame.sprite.Sprite):
 
-    def __init__(self, bubble_kit, x, y, bubbles, shooter):
+    # bubble_group = None
+
+    def __init__(self, bubble_kit, x, y, bubble_group, shooter):
+    # def __init__(self, bubble_kit, x, y, shooter):
         super().__init__(self.containers)
         self.image = pygame.image.load(bubble_kit.file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (20, 20))
@@ -161,14 +179,13 @@ class Bullet(pygame.sprite.Sprite):
         self.rect.centerx = x
         self.rect.centery = y
         self.status = Status.READY
-        self.bubbles = bubbles
+        self.bubble_group = bubble_group
         self.color = bubble_kit.color
         self.shooter = shooter
-        self.speed_x = None
-        self.speed_y = None
+        self.speed_x = 0
+        self.speed_y = 0
         self.row = None
         self.col = None
-
 
     def round_up(self, value):
         return int(math.copysign(math.ceil(abs(value)), value))
@@ -180,8 +197,12 @@ class Bullet(pygame.sprite.Sprite):
         self.speed_y = -self.round_up(y)
         self.status = Status.LAUNCHED
 
+    def move(self):
+        self.speed_x = randint(-5, 5)
+        self.speed_y = 10
+
     def update(self):
-        if self.status == Status.LAUNCHED:
+        if self.status in (Status.LAUNCHED, self.status.MOVE):
             self.rect.centerx += self.speed_x
             self.rect.centery += self.speed_y
             if self.rect.left < SCREEN.left:
@@ -195,14 +216,10 @@ class Bullet(pygame.sprite.Sprite):
             if self.rect.top < SCREEN.top:
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
-
-            if collided := pygame.sprite.spritecollide(self, self.bubbles, False):
-                print([(bubble.row, bubble.col) for bubble in collided])
+        if self.status == Status.LAUNCHED:
+            if collided := pygame.sprite.spritecollide(self, self.bubble_group, False):
                 collided.sort(key=lambda x: (x.row, x.col))
                 bubble = collided[0]
-                print(bubble.row, bubble.col)
-                # print(self.shooter.bubbles)
-                print(self.shooter.bubbles[bubble.row][bubble.col - 1])
 
                 if bubble.col > 0 and not self.shooter.bubbles[bubble.row][bubble.col - 1]:
                     self.row = bubble.row
@@ -214,12 +231,7 @@ class Bullet(pygame.sprite.Sprite):
                     self.row = bubble.row + 1
                     self.col = bubble.col
 
-
-
-
-
-                self.shooter.bubbles[self.row][self.col]
-
+                self.shooter.bubbles[self.row][self.col] = self
                 if self.row % 2 == 0:
                     x_start = X_START_POS
                 else:
@@ -228,13 +240,48 @@ class Bullet(pygame.sprite.Sprite):
                 x = x_start + BUBBLE_SIZE * self.col
                 self.rect.centerx = x
                 self.rect.centery = y
-                self.bubbles.add(self)
-                self.status = Status.READY
-                
-    def check_color(self):
-        pass
+                self.bubble_group.add(self)
+                neighbors = []
+                self.check_color(self.row, self.col, neighbors)
+                if len(neighbors) >= 3:
+                    for row, col in neighbors:
+                        bubble = self.shooter.bubbles[row][col]
+                        self.shooter.bubbles[row][col] = None
+                        bubble.status = Status.MOVE
+                        bubble.move()
+                else:
+                    self.speed_x = 0
+                    self.speed_y = 0
+                    self.status = Status.STAY
 
+                self.shooter.status = Status.CHARGE
+      
+    def check_color(self, row, col, neighbors):
+        if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
+            return
+        if self.shooter.bubbles[row][col] is None:
+            return
+        if self.shooter.bubbles[row][col].color != self.color:
+            return
+        if (row, col) in neighbors:
+            return
+        neighbors.append((row, col))
+        print(row, col)
 
+        if row % 2 == 0:
+            self.check_color(row - 1, col - 1, neighbors)
+            self.check_color(row - 1, col, neighbors)
+            self.check_color(row, col - 1, neighbors)
+            self.check_color(row, col + 1, neighbors)
+            self.check_color(row + 1, col - 1, neighbors)
+            self.check_color(row + 1, col, neighbors)
+        else:
+            self.check_color(row - 1, col, neighbors)
+            self.check_color(row - 1, col + 1, neighbors)
+            self.check_color(row, col - 1, neighbors)
+            self.check_color(row, col + 1, neighbors)
+            self.check_color(row + 1, col, neighbors)
+            self.check_color(row + 1, col + 1, neighbors)
 
     def check_collide(self, collided_bubble):
         for bubble in pygame.sprite.spritecollide(self, self.bubbles, False):
@@ -245,22 +292,6 @@ class Bullet(pygame.sprite.Sprite):
         pass
 
 
-    # def check_matrix(self, bubble):
-    #     row = bubble.row
-    #     col = bubble.col
-    #     while row < 
-    # 最初にぶつかったバブルと同じrowで左右に連続しているもののカラムインデックスを調べる。
-    #　一段上に行き、そのカラムと同じか左右に連続しているものを調べる。
-    # さらに上にいって調べる
-    # 最初にぶつかったカラムの下の方向にも調べる。
-    # 再帰？
-
-        
-
-            
-
-
-
 def main():
     pygame.init()
     screen = pygame.display.set_mode(SCREEN.size)
@@ -269,8 +300,9 @@ def main():
     bullets = pygame.sprite.RenderUpdates()
     Bubble.containers = bubbles
     Bullet.containers = bullets
+    # Bullet.bubble_group = bubbles
     # ball = Ball('images/ball_pink.png')
-    bubble_shooter = PyBubbleShooter(screen, bubbles)
+    bubble_shooter = Shooter(screen, bubbles)
     clock = pygame.time.Clock()
     pygame.key.set_repeat(500, 100)
 
@@ -302,11 +334,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# def draw_arrow(screen, colour, start, end): 
-#     pygame.draw.line(screen,colour,start,end,2) 
-#     rotation = math.degrees(math.atan2(start[1]-end[1], end[0]-start[0]))+90 
-#     pygame.draw.polygon(screen, (255, 0, 0), 
-#         ((end[0]+20*math.sin(math.radians(rotation)), end[1]+20*math.cos(math.radians(rotation))),
-#         (end[0]+20*math.sin(math.radians(rotation-120)), end[1]+20*math.cos(math.radians(rotation-120))),
-#         (end[0]+20*math.sin(math.radians(rotation+120)), end[1]+20*math.cos(math.radians(rotation+120))))) 
