@@ -60,7 +60,7 @@ class Shooter:
         self.angle = 90
         self.bubble_group = bubble_group
         self.bubbles = [[None for _ in range(COLS)] for _ in range(ROWS)]
-        self.create_bubbles(5)
+        self.create_bubbles(6)
         self.status = Status.READY
 
 
@@ -190,6 +190,11 @@ class Bullet(pygame.sprite.Sprite):
     def round_up(self, value):
         return int(math.copysign(math.ceil(abs(value)), value))
 
+    def calc_distance(self, bubble):
+        point1 = (self.rect.centerx, self.rect.centery)
+        point2 = (bubble.rect.centerx, bubble.rect.centery)
+        return ((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2) ** 0.5
+
     def shoot(self, angle):
         x = 10 * math.cos(math.radians(angle))
         y = 10 * math.sin(math.radians(angle))
@@ -218,18 +223,22 @@ class Bullet(pygame.sprite.Sprite):
                 self.speed_y = -self.speed_y
         if self.status == Status.LAUNCHED:
             if collided := pygame.sprite.spritecollide(self, self.bubble_group, False):
-                collided.sort(key=lambda x: (x.row, x.col))
-                bubble = collided[0]
+                self.row, self.col = self.find_destination(collided)
+                # collided.sort(key=lambda x: (x.row, x.col))
+                # bubble = collided[0]
 
-                if bubble.col > 0 and not self.shooter.bubbles[bubble.row][bubble.col - 1]:
-                    self.row = bubble.row
-                    self.col = bubble.col - 1
-                elif bubble.col < COLS - 1 and not self.shooter.bubbles[bubble.row][bubble.col + 1]:
-                    self.row = bubble.row
-                    self.col = bubble.col - 1
-                elif bubble.row < ROWS - 1:
-                    self.row = bubble.row + 1
-                    self.col = bubble.col
+                # if bubble.col > 0 and not self.shooter.bubbles[bubble.row][bubble.col - 1]:
+                #     self.row = bubble.row
+                #     self.col = bubble.col - 1
+                # elif bubble.col < COLS - 1 and not self.shooter.bubbles[bubble.row][bubble.col + 1]:
+                #     self.row = bubble.row
+                #     self.col = bubble.col - 1
+                # elif bubble.row < ROWS - 1:
+                #     self.row = bubble.row + 1
+                #     self.col = bubble.col
+
+                # print(self.row, self.col)
+                # print(self.shooter.bubbles)
 
                 self.shooter.bubbles[self.row][self.col] = self
                 if self.row % 2 == 0:
@@ -255,7 +264,28 @@ class Bullet(pygame.sprite.Sprite):
                     self.status = Status.STAY
 
                 self.shooter.status = Status.CHARGE
-      
+
+    def find_destination(self, collided):
+        collided.sort(key=self.calc_distance)
+        print([(b.row, b.col) for b in collided])
+        for bubble in collided:
+            # 下2か所左右を探す順番をランダムにする！
+
+            if bubble.row % 2 == 0:
+                if not self.shooter.bubbles[bubble.row + 1][bubble.col - 1]:
+                    return bubble.row + 1, bubble.col - 1
+                if not self.shooter.bubbles[bubble.row + 1][bubble.col]:
+                    return bubble.row + 1, bubble.col
+            else:
+                if not self.shooter.bubbles[bubble.row + 1][bubble.col]:
+                    return bubble.row + 1, bubble.col
+                if not self.shooter.bubbles[bubble.row + 1][bubble.col + 1]:
+                    return bubble.row + 1, bubble.col + 1
+            if not self.shooter.bubbles[bubble.row][bubble.col - 1]:
+                return bubble.row, bubble.col - 1
+            if not self.shooter.bubbles[bubble.row][bubble.col + 1]:
+                return bubble.row, bubble.col + 1
+
     def check_color(self, row, col, neighbors):
         if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
             return
@@ -266,7 +296,6 @@ class Bullet(pygame.sprite.Sprite):
         if (row, col) in neighbors:
             return
         neighbors.append((row, col))
-        print(row, col)
 
         if row % 2 == 0:
             self.check_color(row - 1, col - 1, neighbors)
@@ -282,14 +311,6 @@ class Bullet(pygame.sprite.Sprite):
             self.check_color(row, col + 1, neighbors)
             self.check_color(row + 1, col, neighbors)
             self.check_color(row + 1, col + 1, neighbors)
-
-    def check_collide(self, collided_bubble):
-        for bubble in pygame.sprite.spritecollide(self, self.bubbles, False):
-            if bubble.color == self.color:
-                yield bubble
-
-    def destination(self):
-        pass
 
 
 def main():
