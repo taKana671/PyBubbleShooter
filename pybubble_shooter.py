@@ -6,6 +6,8 @@ from enum import Enum, auto
 from pygame.locals import QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, KEYDOWN, MOUSEBUTTONDOWN, Rect
 from random import randint
 
+import numpy as np
+
 
 SCREEN_WIDTH = 410
 
@@ -24,7 +26,7 @@ BUBBLE_SIZE = 20
 # arrow
 ARROW_START_X = 205
 ARROW_START_Y = 600
-ARROW_START = (ARROW_START_X, ARROW_START_Y)
+# ARROW_START = (ARROW_START_X, ARROW_START_Y)
 
 # color
 COLOR_GREEN = (0, 100, 0)
@@ -53,36 +55,66 @@ class Status(Enum):
     SHOT = auto()
 
 
+Point = namedtuple('Point', 'x y')
+
+
+def round_up(value):
+    return int(math.copysign(math.ceil(abs(value)), value))
+
+
 class Shooter:
 
     def __init__(self, screen, bubble_group):
         self.screen = screen
         self.angle = 90
         self.bubble_group = bubble_group
-        self.bubbles = [[None for _ in range(COLS)] for _ in range(ROWS)]
-        self.create_bubbles(6)
+        self.targets = [[None for _ in range(COLS)] for _ in range(ROWS)]
+        self.create_bubbles()
         self.status = Status.READY
+        self.create_variables()
 
+    def create_variables(self):
+        self.launcher = Point(SCREEN.width // 2, SCREEN.height)
+        self.radius = self.get_radius(205, 600)
+        self.limit_angle = round_up(
+            self.calculate_angle(SCREEN.height, SCREEN.width // 2))
+        # print(self.limit_angle)
 
-    def create_bubbles(self, rows=15):
-        for row in range(rows):
-            if row % 2 == 0:
-                x_start = X_START_POS
-            else:
-                x_start = X_START_POS + BUBBLE_SIZE / 2
-            y = Y_START_POS + BUBBLE_SIZE * row
-            for col in range(20):
-                index = randint(0, 5)
-                # x = X_START_POS + BUBBLE_SIZE * col
-                x = x_start + BUBBLE_SIZE * col
-                bubble = Bubble(BUBBLES[index], x, y, row, col)
-                self.bubbles[row][col] = bubble
+    def create_bubbles(self, rows=20):
+        # for row in range(rows):
+        #     if row % 2 == 0:
+        #         x_start = X_START_POS
+        #     else:
+        #         x_start = X_START_POS + BUBBLE_SIZE / 2
+        #     y = Y_START_POS + BUBBLE_SIZE * row
+        #     for col in range(20):
+        #         index = randint(0, 5)
+        #         # x = X_START_POS + BUBBLE_SIZE * col
+        #         x = x_start + BUBBLE_SIZE * col
+        #         bubble = Bubble(BUBBLES[index], x, y, row, col)
+        #         self.targets[row][col] = bubble
         self.charge()
         # index = randint(0, 5)
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
     def update(self):
-        self.draw_arrow()
+        if 0 < self.angle <= self.limit_angle:
+            y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
+            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (410, y), 2)
+            dest_x = SCREEN.width - round_up(self.calculate_height(self.angle, y))
+            pygame.draw.line(self.screen, DARK_GREEN, (410, y), (dest_x, 0), 2)
+        if self.limit_angle < self.angle <= 90:
+            x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
+            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (x, 0), 2)
+        if 90 < self.angle < 180 - self.limit_angle:
+            x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
+            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (x, 0), 2)
+        if self.angle >= 180 - self.limit_angle:
+            y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
+            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (0, y), 2)
+            dest_x = round_up(self.calculate_height(180 - self.angle, y))
+            pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
+
         if self.status == Status.CHARGE:
             self.charge()
             self.status = Status.READY
@@ -92,24 +124,45 @@ class Shooter:
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
         self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
-    def draw_arrow(self):
-        arrow_end = self.get_coordinates()
-        arrow_head = self.get_arrow_head(*arrow_end)
-        pygame.draw.line(self.screen, DARK_GREEN, ARROW_START, arrow_end, 3)
-        pygame.draw.polygon(self.screen, DARK_GREEN, arrow_head)
+    def get_cross_point(self, ptA, ptB, ptC, ptD):
+        denominator = (ptB.x - ptA.x) * (ptD.y - ptC.y) - (ptB.y - ptA.y) * (ptD.x - ptC.x)
+        # parallel
+        if not denominator:
+            return None
 
-    def get_arrow_head(self, end_x, end_y, size=10):
-        rotation = math.degrees(math.atan2(ARROW_START_Y - end_y, end_x - ARROW_START_X)) + 90
-        arrow_head = (
-            (end_x + size * math.sin(math.radians(rotation)), end_y + size * math.cos(math.radians(rotation))),
-            (end_x + size * math.sin(math.radians(rotation - 120)), end_y + size * math.cos(math.radians(rotation - 120))),
-            (end_x + size * math.sin(math.radians(rotation + 120)), end_y + size * math.cos(math.radians(rotation + 120))))
-        return arrow_head
+        vector = (ptC.x - ptA.x, ptC.y - ptA.y)
+        r = ((ptD.y - ptC.y) * vector[0] - (ptD.x - ptC.x) * vector[1]) / denominator
+        distance = ((ptB.x - ptA.x) * r, (ptB.y - ptA.y) * r)
 
-    def get_coordinates(self, radius=100):
-        x = ARROW_START_X + radius * math.cos(math.radians(self.angle))
-        y = ARROW_START_Y - radius * math.sin(math.radians(self.angle))
-        return x, y
+        y = int(ptA.y + distance[1])
+        if y < 0:
+            y = 0
+
+        cross_point = Point(int(ptA.x + distance[0]), y)
+        # cross_point = Point(int(ptA.x + distance[0]), int(ptA.y + distance[1]))
+        return cross_point
+
+    def is_intersect(self, p1, p2, p3, p4):
+        # 座標 p1,p2 を通る直線と座標 p3,p4 を結ぶ線分が交差しているかを調べる
+        tc1 = (p1.x - p2.x) * (p3.y - p1.y) + (p1.y - p2.y) * (p1.x - p3.x)
+        tc2 = (p1.x - p2.x) * (p4.y - p1.y) + (p1.y - p2.y) * (p1.x - p4.x)
+        td1 = (p3.x - p4.x) * (p1.y - p3.y) + (p3.y - p4.y) * (p3.x - p1.x)
+        td2 = (p3.x - p4.x) * (p2.y - p3.y) + (p3.y - p4.y) * (p3.x - p2.x)
+        return tc1 * tc2 < 0 and td1 * td2 < 0
+
+    def get_radius(self, bottom, height):
+        return (bottom ** 2 + height ** 2) ** 0.5
+
+    def calculate_angle(self, height, bottom):
+        return math.degrees(math.atan2(height, bottom))
+
+    def calculate_height(self, angle, bottom):
+        return math.tan(math.radians(angle)) * bottom
+
+    def get_coordinates(self):
+        x = ARROW_START_X + self.radius * math.cos(math.radians(self.angle))
+        y = ARROW_START_Y - self.radius * math.sin(math.radians(self.angle))
+        return Point(x, y)
 
     def move_right(self):
         self.angle -= 2
@@ -186,6 +239,7 @@ class Bullet(pygame.sprite.Sprite):
         self.speed_y = 0
         self.row = None
         self.col = None
+        self.random_generator = np.random.default_rng()
 
     def round_up(self, value):
         return int(math.copysign(math.ceil(abs(value)), value))
@@ -240,7 +294,7 @@ class Bullet(pygame.sprite.Sprite):
                 # print(self.row, self.col)
                 # print(self.shooter.bubbles)
 
-                self.shooter.bubbles[self.row][self.col] = self
+                self.shooter.targets[self.row][self.col] = self
                 if self.row % 2 == 0:
                     x_start = X_START_POS
                 else:
@@ -254,8 +308,8 @@ class Bullet(pygame.sprite.Sprite):
                 self.check_color(self.row, self.col, neighbors)
                 if len(neighbors) >= 3:
                     for row, col in neighbors:
-                        bubble = self.shooter.bubbles[row][col]
-                        self.shooter.bubbles[row][col] = None
+                        bubble = self.shooter.targets[row][col]
+                        self.shooter.targets[row][col] = None
                         bubble.status = Status.MOVE
                         bubble.move()
                 else:
@@ -266,32 +320,76 @@ class Bullet(pygame.sprite.Sprite):
                 self.shooter.status = Status.CHARGE
 
     def find_destination(self, collided):
-        collided.sort(key=self.calc_distance)
         print([(b.row, b.col) for b in collided])
         for bubble in collided:
-            # 下2か所左右を探す順番をランダムにする！
+            func = self.check_even_rows if bubble.row % 2 == 0 else self.check_odd_rows
+            for number in self.random_generator.permutation(4):
+                new_row, new_col = func(bubble.row, bubble.col, number)
+                if new_row and new_col:
+                    return new_row, new_col
 
-            if bubble.row % 2 == 0:
-                if not self.shooter.bubbles[bubble.row + 1][bubble.col - 1]:
-                    return bubble.row + 1, bubble.col - 1
-                if not self.shooter.bubbles[bubble.row + 1][bubble.col]:
-                    return bubble.row + 1, bubble.col
-            else:
-                if not self.shooter.bubbles[bubble.row + 1][bubble.col]:
-                    return bubble.row + 1, bubble.col
-                if not self.shooter.bubbles[bubble.row + 1][bubble.col + 1]:
-                    return bubble.row + 1, bubble.col + 1
-            if not self.shooter.bubbles[bubble.row][bubble.col - 1]:
-                return bubble.row, bubble.col - 1
-            if not self.shooter.bubbles[bubble.row][bubble.col + 1]:
-                return bubble.row, bubble.col + 1
+    def check_even_rows(self, row, col, number):
+        if number == 0:
+            if row < ROWS - 1 and col > 0:
+                if not self.shooter.targets[row + 1][col - 1]:
+                    return row + 1, col - 1
+            return None, None
+        elif number == 1:
+            if row < ROWS - 1:
+                if not self.shooter.targets[row + 1][col]:
+                    return row + 1, col
+            return None, None
+        elif number == 2:
+            if col > 0:
+                if not self.shooter.targets[row][col - 1]:
+                    return row, col - 1
+            return None, None
+        elif number == 3:
+            if col < COLS - 1:
+                if not self.shooter.targets[row][col + 1]:
+                    return row, col + 1
+            return None, None
+
+    def check_odd_rows(self, row, col, number):
+        if number == 0:
+            if row < ROWS - 1:
+                if not self.shooter.targets[row + 1][col]:
+                    return row + 1, col + 1
+            return None, None
+        elif number == 1:
+            if row < ROWS - 1 and col < COLS - 1:
+                if not self.shooter.targets[row + 1][col + 1]:
+                    return row + 1, col
+            return None, None
+        elif number == 2:
+            if col > 0:
+                if not self.shooter.targets[row][col - 1]:
+                    return row, col - 1
+            return None, None
+        elif number == 3:
+            if col < COLS - 1:
+                if not self.shooter.targets[row][col + 1]:
+                    return row, col + 1
+            return None, None
+
+
+
+
+
+
+
+
+
+
+
+
 
     def check_color(self, row, col, neighbors):
         if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
             return
-        if self.shooter.bubbles[row][col] is None:
+        if self.shooter.targets[row][col] is None:
             return
-        if self.shooter.bubbles[row][col].color != self.color:
+        if self.shooter.targets[row][col].color != self.color:
             return
         if (row, col) in neighbors:
             return
