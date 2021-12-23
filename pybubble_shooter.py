@@ -74,25 +74,21 @@ class Shooter:
         self.create_variables()
 
     def create_variables(self):
-        self.launcher = Point(SCREEN.width // 2, SCREEN.height)
+        self.launcher = (SCREEN.width // 2, SCREEN.height)
         self.radius = self.get_radius(205, 600)
         self.limit_angle = round_up(
             self.calculate_angle(SCREEN.height, SCREEN.width // 2))
         # print(self.limit_angle)
 
     def create_bubbles(self, rows=20):
-        # for row in range(rows):
-        #     if row % 2 == 0:
-        #         x_start = X_START_POS
-        #     else:
-        #         x_start = X_START_POS + BUBBLE_SIZE / 2
-        #     y = Y_START_POS + BUBBLE_SIZE * row
-        #     for col in range(20):
-        #         index = randint(0, 5)
-        #         # x = X_START_POS + BUBBLE_SIZE * col
-        #         x = x_start + BUBBLE_SIZE * col
-        #         bubble = Bubble(BUBBLES[index], x, y, row, col)
-        #         self.targets[row][col] = bubble
+        for row in range(rows):
+            starting_x = self.calculate_starting_x(row)
+            y = self.calculate_centery(row)
+            for col in range(20):
+                index = randint(0, 5)
+                x = self.calculate_centerx(starting_x, col)
+                bubble = Bubble(BUBBLES[index], x, y, row, col)
+                self.targets[row][col] = bubble
         self.charge()
         # index = randint(0, 5)
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
@@ -100,19 +96,20 @@ class Shooter:
     def update(self):
         if 0 < self.angle <= self.limit_angle:
             y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (410, y), 2)
-            dest_x = SCREEN.width - round_up(self.calculate_height(self.angle, y))
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (410, y), 2)
+            dest_x = SCREEN.width - round_up(self.calculate_height(180 - 90 - self.angle, y))
             pygame.draw.line(self.screen, DARK_GREEN, (410, y), (dest_x, 0), 2)
         if self.limit_angle < self.angle <= 90:
             x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
-            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (x, 0), 2)
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
         if 90 < self.angle < 180 - self.limit_angle:
             x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
-            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (x, 0), 2)
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
         if self.angle >= 180 - self.limit_angle:
             y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, (self.launcher.x, self.launcher.y), (0, y), 2)
-            dest_x = round_up(self.calculate_height(180 - self.angle, y))
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
+            # dest_x = round_up(self.calculate_height(180 - self.angle, y))
+            dest_x = round_up(self.calculate_height(self.angle - 90, y))
             pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
 
         if self.status == Status.CHARGE:
@@ -142,13 +139,40 @@ class Shooter:
         # cross_point = Point(int(ptA.x + distance[0]), int(ptA.y + distance[1]))
         return cross_point
 
+    def calculate_starting_x(self, row):
+        if row % 2 == 0:
+            return X_START_POS
+        else:
+            return X_START_POS + BUBBLE_SIZE / 2
+
+    def calculate_centerx(self, starting_x, col):
+        return starting_x + BUBBLE_SIZE * col
+
+    def calculate_centery(self, row):
+        return Y_START_POS + BUBBLE_SIZE * row
+
+    def get_diagonal(self, row, col):
+        starting_x = self.calculate_starting_x(row)
+        centerx = self.calculate_centerx(starting_x, col)
+        centery = self.calculate_centery(starting_x, row)
+        left_top = (centerx - BUBBLE_SIZE // 2, centery - BUBBLE_SIZE // 2) 
+        right_bottom = (centerx + BUBBLE_SIZE // 2, centery + BUBBLE_SIZE // 2)
+        return left_top, right_bottom
+
     def is_intersect(self, p1, p2, p3, p4):
         # 座標 p1,p2 を通る直線と座標 p3,p4 を結ぶ線分が交差しているかを調べる
-        tc1 = (p1.x - p2.x) * (p3.y - p1.y) + (p1.y - p2.y) * (p1.x - p3.x)
-        tc2 = (p1.x - p2.x) * (p4.y - p1.y) + (p1.y - p2.y) * (p1.x - p4.x)
-        td1 = (p3.x - p4.x) * (p1.y - p3.y) + (p3.y - p4.y) * (p3.x - p1.x)
-        td2 = (p3.x - p4.x) * (p2.y - p3.y) + (p3.y - p4.y) * (p3.x - p2.x)
+        tc1 = (p1[0] - p2[0]) * (p3[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p3[0])
+        tc2 = (p1[0] - p2[0]) * (p4[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p4[0])
+        td1 = (p3[0] - p4[0]) * (p1[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p1[0])
+        td2 = (p3[0] - p4[0]) * (p2[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p2[0])
         return tc1 * tc2 < 0 and td1 * td2 < 0
+
+    # def find_destination(self, p1, p2):
+    #     for i, item in enumerate(self.target[::-1]):
+    #         if any(item):
+    #             for j, cell in enumerate(item):
+    #                 left_top, right_bottom = self.get_diagonal(i, j)
+                    
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -371,18 +395,6 @@ class Bullet(pygame.sprite.Sprite):
                 if not self.shooter.targets[row][col + 1]:
                     return row, col + 1
             return None, None
-
-
-
-
-
-
-
-
-
-
-
-
 
     def check_color(self, row, col, neighbors):
         if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
