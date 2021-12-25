@@ -55,6 +55,16 @@ class Status(Enum):
     SHOT = auto()
 
 
+# Coordinates = namedtuple('Coordinates', 'x y')
+
+
+# class Point(Coordinates):
+
+#     @property
+#     def coords(self):
+#         return tuple(self)
+
+
 Point = namedtuple('Point', 'x y')
 
 
@@ -69,15 +79,17 @@ class Cell:
         self.row = row
         self.col = col
         self.calculate_center()
-        self.calculate_diagonal()
+        self.calculate_points()
 
-    def calculate_diagonal(self):
+    def calculate_points(self):
         half = BUBBLE_SIZE // 2
-        self.left_top = Point(self.center.x - half, self.center.y - half)
-        self.right_bottom = Point(self.center.x + half, self.center.y + half)
+        self.left = Point(self.center.x - half, self.center.y)
+        self.right = Point(self.center.x + half, self.center.y)
 
-        # ***************
-        # Needs right_top and left_bottom
+        # self.left_top = Point(self.center.x - half, self.center.y - half)
+        # self.right_bottom = Point(self.center.x + half, self.center.y + half)
+        # self.right_top = Point(self.center.x + half, self.center.y - half)
+        # self.left_bottom = Point(self.center.x - half, self.center.y + half)
 
     def calculate_center(self):
         if self.row % 2 == 0:
@@ -87,14 +99,6 @@ class Cell:
         x = start + BUBBLE_SIZE * self.col
         y = Y_START_POS + BUBBLE_SIZE * self.row
         self.center = Point(x, y)
-
-    def is_crossing(self, pt1, pt2):
-        # Needs cross points route line and self.left_top-right_bottom or right_top-left_bottom
-        tc1 = (pt1.x - pt2.x) * (self.left_top.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - self.left_top.x)
-        tc2 = (pt1.x - pt2.x) * (self.right_bottom.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - self.right_bottom.x)
-        td1 = (self.left_top.x - self.right_bottom.x) * (pt1.y - self.left_top.y) + (self.left_top.y - self.right_bottom.y) * (self.left_top.x - pt1.x)
-        td2 = (self.left_top.x - self.right_bottom.x) * (pt2.y - self.left_top.y) + (self.left_top.y - self.right_bottom.y) * (self.left_top.x - pt2.x)
-        return tc1 * tc2 < 0 and td1 * td2 < 0
 
 
 class Shooter:
@@ -109,7 +113,7 @@ class Shooter:
         self.status = Status.READY
 
     def create_variables(self):
-        self.launcher = (SCREEN.width // 2, SCREEN.height)
+        self.launcher = Point(SCREEN.width // 2, SCREEN.height)
         self.radius = self.get_radius(SCREEN.width // 2, SCREEN.height)
         self.limit_angle = round_up(
             self.calculate_angle(SCREEN.height, SCREEN.width // 2))
@@ -125,26 +129,42 @@ class Shooter:
     def update(self):
         if 0 < self.angle <= self.limit_angle:
             y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
+            end = Point(SCREEN.width, y)
+            empty, target = self.find_destination(self.launcher, end)
+            if not target:
+                pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
+            else:
+                cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+                pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
+            
+            # pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
             # print(180 - 90 - self.angle)
-            dest_x = SCREEN.width - round_up(self.calculate_height(180 - 90 - self.angle, y))
-            pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
+            # print(round_up(self.calculate_height(180 - self.angle, y)))
+
+            # dest_x = SCREEN.width - round_up(self.calculate_height(90 - self.angle, y))
+         
+            # pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
+
         if self.limit_angle < self.angle <= 90:
             x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
-            
-            dest = self.find_destination(Point(self.launcher[0], self.launcher[1]), Point(x, 0))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (dest.center.x, dest.center.y), 2)
-            
-            # pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
+            end = Point(x, 0)
+            empty, target = self.find_destination(self.launcher, end)
+            cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
+
         if 90 < self.angle < 180 - self.limit_angle:
             x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
-        if self.angle >= 180 - self.limit_angle:
-            y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
-            # dest_x = round_up(self.calculate_height(180 - self.angle, y))
-            dest_x = round_up(self.calculate_height(self.angle - 90, y))
-            pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
+            end = Point(x, 0)
+            empty, target = self.find_destination(self.launcher, end)
+            cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
+
+        # if self.angle >= 180 - self.limit_angle:
+        #     y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
+        #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
+        #     # dest_x = round_up(self.calculate_height(180 - self.angle, y))
+        #     dest_x = round_up(self.calculate_height(self.angle - 90, y))
+        #     pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
 
         if self.status == Status.CHARGE:
             self.charge()
@@ -155,54 +175,37 @@ class Shooter:
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
         self.bullet = Bullet(BUBBLES[i], SCREEN.width // 2, SCREEN.height, self.bubble_group, self)
 
-    def get_cross_point(self, ptA, ptB, ptC, ptD):
-        denominator = (ptB.x - ptA.x) * (ptD.y - ptC.y) - (ptB.y - ptA.y) * (ptD.x - ptC.x)
-        # parallel
-        if not denominator:
-            return None
+    def find_cross_point(self, pt1, pt2, pt3, pt4):
+        a0 = pt2.x - pt1.x
+        b0 = pt2.y - pt1.y
+        a2 = pt4.x - pt3.x
+        b2 = pt4.y - pt3.y
 
-        vector = (ptC.x - ptA.x, ptC.y - ptA.y)
-        r = ((ptD.y - ptC.y) * vector[0] - (ptD.x - ptC.x) * vector[1]) / denominator
-        distance = ((ptB.x - ptA.x) * r, (ptB.y - ptA.y) * r)
+        d = a0 * b2 - a2 * b0
+        sn = b2 * (pt3.x - pt1.x) - a2 * (pt3.y - pt1.y)
+        x = pt1.x + a0 * sn / d
+        y = pt1.y + b0 * sn / d
 
-        y = int(ptA.y + distance[1])
-        if y < 0:
-            y = 0
+        return Point(x, y)
 
-        cross_point = Point(int(ptA.x + distance[0]), y)
-        # cross_point = Point(int(ptA.x + distance[0]), int(ptA.y + distance[1]))
-        return cross_point
+    def is_crossing(self, pt1, pt2, pt3, pt4):
+        tc1 = (pt1.x - pt2.x) * (pt3.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - pt3.x)
+        tc2 = (pt1.x - pt2.x) * (pt4.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - pt4.x)
+        td1 = (pt3.x - pt4.x) * (pt1.y - pt3.y) + (pt3.y - pt4.y) * (pt3.x - pt1.x)
+        td2 = (pt3.x - pt4.x) * (pt2.y - pt3.y) + (pt3.y - pt4.y) * (pt3.x - pt2.x)
 
-    def calculate_starting_x(self, row):
-        if row % 2 == 0:
-            return X_START_POS
-        else:
-            return X_START_POS + BUBBLE_SIZE // 2
-
-    def calculate_centerx(self, starting_x, col):
-        return starting_x + BUBBLE_SIZE * col
-
-    def calculate_centery(self, row):
-        return Y_START_POS + BUBBLE_SIZE * row
-
-    # def is_intersect(self, p1, p2, p3, p4):
-    #     # 座標 p1,p2 を通る直線と座標 p3,p4 を結ぶ線分が交差しているかを調べる
-    #     tc1 = (p1[0] - p2[0]) * (p3[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p3[0])
-    #     tc2 = (p1[0] - p2[0]) * (p4[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p4[0])
-    #     td1 = (p3[0] - p4[0]) * (p1[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p1[0])
-    #     td2 = (p3[0] - p4[0]) * (p2[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p2[0])
-    #     return tc1 * tc2 < 0 and td1 * td2 < 0
+        return tc1 * tc2 < 0 and td1 * td2 < 0
 
     def find_destination(self, pt1, pt2):
         found = None
         for row, cells in zip(range(ROWS - 1, -1, -1), self.targets[::-1]):
             for col, cell in enumerate(cells):
-                if cell.is_crossing(pt1, pt2):
+                if self.is_crossing(pt1, pt2, cell.left, cell.right):
                     if not cell.bubble:
                         found = cell
                     else:
-                        return found
-        return found
+                        return found, cell
+        return found, None
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
