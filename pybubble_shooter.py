@@ -109,7 +109,7 @@ class Shooter:
         self.bubble_group = bubble_group
         self.targets = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles()
+        self.create_bubbles(5)
         self.status = Status.READY
 
     def create_variables(self):
@@ -126,45 +126,76 @@ class Shooter:
                 cell.bubble = bubble
         self.charge()
 
+    
+    def recursive_draw_line(self, angle, start):
+        x = SCREEN.width - round_up(self.calculate_height(angle, start.y))
+        if x < 0:
+            bottom = round_up(self.calculate_bottom(angle, SCREEN.width))
+            left_pt = Point(0, start.y - bottom)
+            pygame.draw.line(self.screen, DARK_GREEN, start, left_pt, 2)
+        else:
+            pygame.draw.line(self.screen, DARK_GREEN, start, (x, 0), 2)
+            return
+
+        # angle = 180 - angle
+        x = round_up(self.calculate_height(angle, left_pt.y))
+        if x > SCREEN.width:
+            bottom = round_up(self.calculate_bottom(angle, SCREEN.width))
+            right_pt = Point(SCREEN.width, left_pt.y - bottom)
+            pygame.draw.line(self.screen, DARK_GREEN, left_pt, right_pt, 2)
+        else:
+            pygame.draw.line(self.screen, DARK_GREEN, left_pt, (x, 0), 2)
+            return
+
+        self.recursive_draw_line(angle, right_pt)
+
+
     def update(self):
         if 0 < self.angle <= self.limit_angle:
             y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
             end = Point(SCREEN.width, y)
-            empty, target = self.find_destination(self.launcher, end)
-            if not target:
-                pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
-            else:
-                cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
-                pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
-            
-            # pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
-            # print(180 - 90 - self.angle)
-            # print(round_up(self.calculate_height(180 - self.angle, y)))
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, end, 2)
 
+            reflection_angle = 90 - self.angle
+            self.recursive_draw_line(reflection_angle, end)    
+            
+            # pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
+           
+                
+
+
+
+            # y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
+            # end = Point(SCREEN.width, y)
+            # empty, target = self.find_destination(self.launcher, end)
+            # if not target:
+            #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
+            # else:
+            #     cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+            #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
             # dest_x = SCREEN.width - round_up(self.calculate_height(90 - self.angle, y))
-         
             # pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
 
         if self.limit_angle < self.angle <= 90:
             x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
             end = Point(x, 0)
-            empty, target = self.find_destination(self.launcher, end)
-            cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+            dest, target = self.find_destination(self.launcher, end)
+            cross_point = self.find_cross_point(self.launcher, end, dest.left, dest.right)
             pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
 
         if 90 < self.angle < 180 - self.limit_angle:
             x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
             end = Point(x, 0)
-            empty, target = self.find_destination(self.launcher, end)
-            cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
+            dest, target = self.find_destination(self.launcher, end)
+            cross_point = self.find_cross_point(self.launcher, end, dest.left, dest.right)
             pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
 
-        # if self.angle >= 180 - self.limit_angle:
-        #     y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
-        #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
-        #     # dest_x = round_up(self.calculate_height(180 - self.angle, y))
-        #     dest_x = round_up(self.calculate_height(self.angle - 90, y))
-        #     pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
+        if self.angle >= 180 - self.limit_angle:
+            y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
+            # dest_x = round_up(self.calculate_height(180 - self.angle, y))
+            dest_x = round_up(self.calculate_height(self.angle - 90, y))
+            pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
 
         if self.status == Status.CHARGE:
             self.charge()
@@ -205,6 +236,9 @@ class Shooter:
                         found = cell
                     else:
                         return found, cell
+        if found is None:
+            print(pt1, pt2)
+
         return found, None
 
     def get_radius(self, bottom, height):
@@ -215,6 +249,9 @@ class Shooter:
 
     def calculate_height(self, angle, bottom):
         return math.tan(math.radians(angle)) * bottom
+
+    def calculate_bottom(self, angle, height):
+        return height / math.tan(math.radians(angle))
 
     def get_coordinates(self):
         x = ARROW_START_X + self.radius * math.cos(math.radians(self.angle))
