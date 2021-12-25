@@ -9,23 +9,23 @@ from random import randint
 import numpy as np
 
 
-SCREEN_WIDTH = 410
+SCREEN_WIDTH = 526
+SCREEN_HEIGHT = 600
+SCREEN = Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+ROW_START = 16
+COL_START = 15
 
-SCREEN = Rect(0, 0, SCREEN_WIDTH, 600)
-ROW_START = 10
-COL_START = 10
+Y_START_POS = 15
+X_START_POS = 16
 
-Y_START_POS = 10
-X_START_POS = 10
+ROWS = 20
+COLS = 17
 
-ROWS = 30
-COLS = 20
-
-BUBBLE_SIZE = 20
+BUBBLE_SIZE = 30
 
 # arrow
-ARROW_START_X = 205
-ARROW_START_Y = 600
+ARROW_START_X = SCREEN_WIDTH // 2
+ARROW_START_Y = SCREEN_HEIGHT
 # ARROW_START = (ARROW_START_X, ARROW_START_Y)
 
 # color
@@ -62,46 +62,80 @@ def round_up(value):
     return int(math.copysign(math.ceil(abs(value)), value))
 
 
+class Cell:
+
+    def __init__(self, row, col):
+        self.bubble = None
+        self.row = row
+        self.col = col
+        self.calculate_center()
+        self.calculate_diagonal()
+
+    def calculate_diagonal(self):
+        half = BUBBLE_SIZE // 2
+        self.left_top = Point(self.center.x - half, self.center.y - half)
+        self.right_bottom = Point(self.center.x + half, self.center.y + half)
+
+        # ***************
+        # Needs right_top and left_bottom
+
+    def calculate_center(self):
+        if self.row % 2 == 0:
+            start = X_START_POS
+        else:
+            start = X_START_POS + BUBBLE_SIZE // 2
+        x = start + BUBBLE_SIZE * self.col
+        y = Y_START_POS + BUBBLE_SIZE * self.row
+        self.center = Point(x, y)
+
+    def is_crossing(self, pt1, pt2):
+        # Needs cross points route line and self.left_top-right_bottom or right_top-left_bottom
+        tc1 = (pt1.x - pt2.x) * (self.left_top.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - self.left_top.x)
+        tc2 = (pt1.x - pt2.x) * (self.right_bottom.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - self.right_bottom.x)
+        td1 = (self.left_top.x - self.right_bottom.x) * (pt1.y - self.left_top.y) + (self.left_top.y - self.right_bottom.y) * (self.left_top.x - pt1.x)
+        td2 = (self.left_top.x - self.right_bottom.x) * (pt2.y - self.left_top.y) + (self.left_top.y - self.right_bottom.y) * (self.left_top.x - pt2.x)
+        return tc1 * tc2 < 0 and td1 * td2 < 0
+
+
 class Shooter:
 
     def __init__(self, screen, bubble_group):
         self.screen = screen
         self.angle = 90
         self.bubble_group = bubble_group
-        self.targets = [[None for _ in range(COLS)] for _ in range(ROWS)]
+        self.targets = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
+        self.create_variables()
         self.create_bubbles()
         self.status = Status.READY
-        self.create_variables()
 
     def create_variables(self):
         self.launcher = (SCREEN.width // 2, SCREEN.height)
-        self.radius = self.get_radius(205, 600)
+        self.radius = self.get_radius(SCREEN.width // 2, SCREEN.height)
         self.limit_angle = round_up(
             self.calculate_angle(SCREEN.height, SCREEN.width // 2))
-        # print(self.limit_angle)
 
-    def create_bubbles(self, rows=20):
+    def create_bubbles(self, rows=15):
         for row in range(rows):
-            starting_x = self.calculate_starting_x(row)
-            y = self.calculate_centery(row)
-            for col in range(20):
-                index = randint(0, 5)
-                x = self.calculate_centerx(starting_x, col)
-                bubble = Bubble(BUBBLES[index], x, y, row, col)
-                self.targets[row][col] = bubble
+            for col, cell in enumerate(self.targets[row]):
+                i = randint(0, 5)
+                bubble = Bubble(BUBBLES[i], cell.center, row, col)
+                cell.bubble = bubble
         self.charge()
-        # index = randint(0, 5)
-        # self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
 
     def update(self):
         if 0 < self.angle <= self.limit_angle:
             y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (410, y), 2)
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
+            # print(180 - 90 - self.angle)
             dest_x = SCREEN.width - round_up(self.calculate_height(180 - 90 - self.angle, y))
-            pygame.draw.line(self.screen, DARK_GREEN, (410, y), (dest_x, 0), 2)
+            pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
         if self.limit_angle < self.angle <= 90:
             x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
+            
+            dest = self.find_destination(Point(self.launcher[0], self.launcher[1]), Point(x, 0))
+            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (dest.center.x, dest.center.y), 2)
+            
+            # pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
         if 90 < self.angle < 180 - self.limit_angle:
             x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
             pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (x, 0), 2)
@@ -117,9 +151,9 @@ class Shooter:
             self.status = Status.READY
 
     def charge(self):
-        index = randint(0, 5)
+        i = randint(0, 5)
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
-        self.bullet = Bullet(BUBBLES[index], 205, 600, self.bubble_group, self)
+        self.bullet = Bullet(BUBBLES[i], SCREEN.width // 2, SCREEN.height, self.bubble_group, self)
 
     def get_cross_point(self, ptA, ptB, ptC, ptD):
         denominator = (ptB.x - ptA.x) * (ptD.y - ptC.y) - (ptB.y - ptA.y) * (ptD.x - ptC.x)
@@ -143,7 +177,7 @@ class Shooter:
         if row % 2 == 0:
             return X_START_POS
         else:
-            return X_START_POS + BUBBLE_SIZE / 2
+            return X_START_POS + BUBBLE_SIZE // 2
 
     def calculate_centerx(self, starting_x, col):
         return starting_x + BUBBLE_SIZE * col
@@ -151,28 +185,24 @@ class Shooter:
     def calculate_centery(self, row):
         return Y_START_POS + BUBBLE_SIZE * row
 
-    def get_diagonal(self, row, col):
-        starting_x = self.calculate_starting_x(row)
-        centerx = self.calculate_centerx(starting_x, col)
-        centery = self.calculate_centery(starting_x, row)
-        left_top = (centerx - BUBBLE_SIZE // 2, centery - BUBBLE_SIZE // 2) 
-        right_bottom = (centerx + BUBBLE_SIZE // 2, centery + BUBBLE_SIZE // 2)
-        return left_top, right_bottom
+    # def is_intersect(self, p1, p2, p3, p4):
+    #     # 座標 p1,p2 を通る直線と座標 p3,p4 を結ぶ線分が交差しているかを調べる
+    #     tc1 = (p1[0] - p2[0]) * (p3[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p3[0])
+    #     tc2 = (p1[0] - p2[0]) * (p4[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p4[0])
+    #     td1 = (p3[0] - p4[0]) * (p1[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p1[0])
+    #     td2 = (p3[0] - p4[0]) * (p2[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p2[0])
+    #     return tc1 * tc2 < 0 and td1 * td2 < 0
 
-    def is_intersect(self, p1, p2, p3, p4):
-        # 座標 p1,p2 を通る直線と座標 p3,p4 を結ぶ線分が交差しているかを調べる
-        tc1 = (p1[0] - p2[0]) * (p3[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p3[0])
-        tc2 = (p1[0] - p2[0]) * (p4[1] - p1[1]) + (p1[1] - p2[1]) * (p1[0] - p4[0])
-        td1 = (p3[0] - p4[0]) * (p1[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p1[0])
-        td2 = (p3[0] - p4[0]) * (p2[1] - p3[1]) + (p3[1] - p4[1]) * (p3[0] - p2[0])
-        return tc1 * tc2 < 0 and td1 * td2 < 0
-
-    # def find_destination(self, p1, p2):
-    #     for i, item in enumerate(self.target[::-1]):
-    #         if any(item):
-    #             for j, cell in enumerate(item):
-    #                 left_top, right_bottom = self.get_diagonal(i, j)
-                    
+    def find_destination(self, pt1, pt2):
+        found = None
+        for row, cells in zip(range(ROWS - 1, -1, -1), self.targets[::-1]):
+            for col, cell in enumerate(cells):
+                if cell.is_crossing(pt1, pt2):
+                    if not cell.bubble:
+                        found = cell
+                    else:
+                        return found
+        return found
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -207,14 +237,14 @@ class Shooter:
 
 class Bubble(pygame.sprite.Sprite):
 
-    def __init__(self, bubble_kit, x, y, row, col):
+    def __init__(self, bubble_kit, center, row, col):
         super().__init__(self.containers)
         # self.screen = screen
         self.image = pygame.image.load(bubble_kit.file).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (20, 20))
+        self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
         self.rect = self.image.get_rect()
-        self.rect.centerx = x
-        self.rect.centery = y
+        self.rect.centerx = center.x
+        self.rect.centery = center.y
         self.row = row
         self.col = col
         self.speed_x = None
@@ -251,7 +281,7 @@ class Bullet(pygame.sprite.Sprite):
     # def __init__(self, bubble_kit, x, y, shooter):
         super().__init__(self.containers)
         self.image = pygame.image.load(bubble_kit.file).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (20, 20))
+        self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
         self.rect = self.image.get_rect()
         self.rect.centerx = x
         self.rect.centery = y
