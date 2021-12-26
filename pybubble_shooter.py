@@ -106,6 +106,8 @@ class Shooter:
     def __init__(self, screen, bubble_group):
         self.screen = screen
         self.angle = 90
+        self.dest = None
+        self.target = None
         self.bubble_group = bubble_group
         self.targets = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
@@ -126,76 +128,83 @@ class Shooter:
                 cell.bubble = bubble
         self.charge()
 
-    
-    def recursive_draw_line(self, angle, start):
-        x = SCREEN.width - round_up(self.calculate_height(angle, start.y))
-        if x < 0:
-            bottom = round_up(self.calculate_bottom(angle, SCREEN.width))
-            left_pt = Point(0, start.y - bottom)
-            pygame.draw.line(self.screen, DARK_GREEN, start, left_pt, 2)
-        else:
-            pygame.draw.line(self.screen, DARK_GREEN, start, (x, 0), 2)
+    def recursive_from_right(self, angle, start):
+        if (x := SCREEN.width - self.calculate_height(angle, start.y)) >= 0:
+            _ = self.find_destination(start, Point(x, 0))
             return
 
-        # angle = 180 - angle
-        x = round_up(self.calculate_height(angle, left_pt.y))
-        if x > SCREEN.width:
-            bottom = round_up(self.calculate_bottom(angle, SCREEN.width))
-            right_pt = Point(SCREEN.width, left_pt.y - bottom)
-            pygame.draw.line(self.screen, DARK_GREEN, left_pt, right_pt, 2)
-        else:
-            pygame.draw.line(self.screen, DARK_GREEN, left_pt, (x, 0), 2)
+        bottom = self.calculate_bottom(angle, SCREEN.width)
+        end_left = Point(0, start.y - bottom)
+        if self.find_destination(start, end_left):
             return
 
-        self.recursive_draw_line(angle, right_pt)
+        if (x := self.calculate_height(angle, end_left.y)) <= SCREEN.width:
+            self.find_destination(end_left, Point(x, 0))
+            return
 
+        bottom = self.calculate_bottom(angle, SCREEN.width)
+        end_right = Point(SCREEN.width, end_left.y - bottom)
+        if self.find_destination(end_left, end_right):
+            return
+
+        self.recursive_from_right(angle, end_right)
+
+    def recursive_from_left(self, angle, start):
+
+        if (x := self.calculate_height(angle, start.y)) <= SCREEN.width:
+            self.find_destination(start, Point(x, 0))
+            return
+
+        bottom = self.calculate_bottom(angle, SCREEN.width)
+        end_right = Point(SCREEN.width, start.y - bottom)
+        if self.find_destination(start, end_right):
+            return
+
+        if (x := SCREEN.width - self.calculate_height(angle, end_right.y)) >= 0:
+            _ = self.find_destination(end_right, Point(x, 0))
+            return
+
+        bottom = self.calculate_bottom(angle, SCREEN.width)
+        end_left = Point(0, end_right.y - bottom)
+        if self.find_destination(end_right, end_left):
+            return
+
+        self.recursive_from_left(angle, end_left)
+
+    def find_destination(self, start, end):
+        """Return False if more lines are to be continuingly drawn.
+        """
+        self.dest, self.target = self.check_targets(start, end)
+        if self.dest and not self.target:
+            pygame.draw.line(self.screen, DARK_GREEN, start, end, 2)
+            return False
+        if self.dest and self.target:
+            cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
+            pygame.draw.line(self.screen, DARK_GREEN, start, cross_point, 2)
+        return True
 
     def update(self):
         if 0 < self.angle <= self.limit_angle:
-            y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
+            y = SCREEN.height - self.calculate_height(self.angle, SCREEN.width // 2)
             end = Point(SCREEN.width, y)
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, end, 2)
-
-            reflection_angle = 90 - self.angle
-            self.recursive_draw_line(reflection_angle, end)    
-            
-            # pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
-           
-                
-
-
-
-            # y = SCREEN.height - round_up(self.calculate_height(self.angle, SCREEN.width // 2))
-            # end = Point(SCREEN.width, y)
-            # empty, target = self.find_destination(self.launcher, end)
-            # if not target:
-            #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (SCREEN.width, y), 2)
-            # else:
-            #     cross_point = self.find_cross_point(self.launcher, end, empty.left, empty.right)
-            #     pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
-            # dest_x = SCREEN.width - round_up(self.calculate_height(90 - self.angle, y))
-            # pygame.draw.line(self.screen, DARK_GREEN, (SCREEN.width, y), (dest_x, 0), 2)
+            if not self.find_destination(self.launcher, end):
+                self.recursive_from_right(90 - self.angle, end)
 
         if self.limit_angle < self.angle <= 90:
-            x = SCREEN.width // 2 + round_up(self.calculate_height(90 - self.angle, SCREEN.height))
+            x = SCREEN.width // 2 + self.calculate_height(90 - self.angle, SCREEN.height)
             end = Point(x, 0)
-            dest, target = self.find_destination(self.launcher, end)
-            cross_point = self.find_cross_point(self.launcher, end, dest.left, dest.right)
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
+            _ = self.find_destination(self.launcher, end)
 
         if 90 < self.angle < 180 - self.limit_angle:
-            x = SCREEN.width // 2 - round_up(self.calculate_height(self.angle - 90, SCREEN.height))
+            x = SCREEN.width // 2 - self.calculate_height(self.angle - 90, SCREEN.height)
             end = Point(x, 0)
-            dest, target = self.find_destination(self.launcher, end)
-            cross_point = self.find_cross_point(self.launcher, end, dest.left, dest.right)
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, cross_point, 2)
+            _ = self.find_destination(self.launcher, end)
 
         if self.angle >= 180 - self.limit_angle:
-            y = SCREEN.height - round_up(self.calculate_height(180 - self.angle, SCREEN.width // 2))
-            pygame.draw.line(self.screen, DARK_GREEN, self.launcher, (0, y), 2)
-            # dest_x = round_up(self.calculate_height(180 - self.angle, y))
-            dest_x = round_up(self.calculate_height(self.angle - 90, y))
-            pygame.draw.line(self.screen, DARK_GREEN, (0, y), (dest_x, 0), 2)
+            y = SCREEN.height - self.calculate_height(180 - self.angle, SCREEN.width // 2)
+            end = Point(0, y)
+            if not self.find_destination(self.launcher, end):
+                self.recursive_from_left(self.angle - 90, end)
 
         if self.status == Status.CHARGE:
             self.charge()
@@ -227,19 +236,17 @@ class Shooter:
 
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
-    def find_destination(self, pt1, pt2):
-        found = None
+    def check_targets(self, pt1, pt2):
+        dest = None
         for row, cells in zip(range(ROWS - 1, -1, -1), self.targets[::-1]):
             for col, cell in enumerate(cells):
                 if self.is_crossing(pt1, pt2, cell.left, cell.right):
                     if not cell.bubble:
-                        found = cell
+                        dest = cell
                     else:
-                        return found, cell
-        if found is None:
-            print(pt1, pt2)
+                        return dest, cell
 
-        return found, None
+        return dest, None
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -248,10 +255,10 @@ class Shooter:
         return math.degrees(math.atan2(height, bottom))
 
     def calculate_height(self, angle, bottom):
-        return math.tan(math.radians(angle)) * bottom
+        return round_up(math.tan(math.radians(angle)) * bottom)
 
     def calculate_bottom(self, angle, height):
-        return height / math.tan(math.radians(angle))
+        return round_up(height / math.tan(math.radians(angle)))
 
     def get_coordinates(self):
         x = ARROW_START_X + self.radius * math.cos(math.radians(self.angle))
