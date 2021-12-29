@@ -73,6 +73,10 @@ def round_up(value):
     return int(math.copysign(math.ceil(abs(value)), value))
 
 
+def round(value):
+    return int((value * 2 + 1) // 2)
+
+
 class Cell:
 
     def __init__(self, row, col):
@@ -309,7 +313,6 @@ class Bullet(pygame.sprite.Sprite):
         self.random_generator = np.random.default_rng()
         self.idx = 0
 
-
     def calculate_speed(self):
         dx = self.line.end.x - self.rect.centerx
         dy = self.line.end.y - self.rect.centery
@@ -318,8 +321,23 @@ class Bullet(pygame.sprite.Sprite):
         vy = round_up(dy * 10 / distance)
         return vx, vy
 
+    def decide_positions(self, start, end, move_on):
+        dx = end.x - start.x
+        dy = end.y - start.y
+        distance = (dx**2 + dy ** 2) ** 0.5
+        vx = dx * 10 / distance
+        vy = dy * 10 / distance
+        x += vx
+        y += vy
+
+        if move_on(x, y):
+            pass_pt = Point(x, y)
+            yield pass_pt
+            yield from self.decide_positions(pass_pt, end, move_on)
+        else:
+            yield end
+
     def shoot(self):
-        self.line = self.shooter.course[self.idx]
         self.status = Status.LAUNCHED
 
     def move(self):
@@ -346,8 +364,6 @@ class Bullet(pygame.sprite.Sprite):
             if self.rect.top < SCREEN.top:
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
-
-
 
 
             # self.rect.centerx += self.speed_x
@@ -416,8 +432,6 @@ class Bullet(pygame.sprite.Sprite):
 
                 self.shooter.status = Status.CHARGE
 
-    
-   
     def check_color(self, row, col, neighbors):
         if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
             return
@@ -443,6 +457,7 @@ class Bullet(pygame.sprite.Sprite):
             self.check_color(row, col + 1, neighbors)
             self.check_color(row + 1, col, neighbors)
             self.check_color(row + 1, col + 1, neighbors)
+
 
 class Bubble(pygame.sprite.Sprite):
 
