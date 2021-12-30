@@ -9,11 +9,15 @@ from random import randint
 import numpy as np
 
 
-SCREEN_WIDTH = 526
-SCREEN_HEIGHT = 600
-SCREEN = Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-ROW_START = 16
-COL_START = 15
+# screen
+SCREEN = Rect(0, 0, 526, 600)
+
+SCREEN_H = SCREEN.height
+SCREEN_W = SCREEN.width
+ 
+
+# ROW_START = 16
+# COL_START = 15
 
 Y_START_POS = 15
 X_START_POS = 16
@@ -22,11 +26,6 @@ ROWS = 20
 COLS = 17
 
 BUBBLE_SIZE = 30
-
-# arrow
-ARROW_START_X = SCREEN_WIDTH // 2
-ARROW_START_Y = SCREEN_HEIGHT
-# ARROW_START = (ARROW_START_X, ARROW_START_Y)
 
 # color
 COLOR_GREEN = (0, 100, 0)
@@ -81,6 +80,7 @@ class Cell:
 
     def __init__(self, row, col):
         self.bubble = None
+        self.drop = False
         self.row = row
         self.col = col
         self.calculate_center()
@@ -115,20 +115,20 @@ class Shooter:
         self.dest = None
         self.target = None
         self.bubble_group = bubble_group
-        self.targets = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
+        self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(5)
+        self.create_bubbles(1)
         self.status = Status.READY
 
     def create_variables(self):
-        self.launcher = Point(SCREEN.width // 2, SCREEN.height)
-        self.radius = self.get_radius(SCREEN.width // 2, SCREEN.height)
+        self.launcher = Point(SCREEN_W // 2, SCREEN_H)
+        self.radius = self.get_radius(SCREEN_W // 2, SCREEN_H)
         self.limit_angle = round_up(
-            self.calculate_angle(SCREEN.height, SCREEN.width // 2))
+            self.calculate_angle(SCREEN_H, SCREEN_W // 2))
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
-            for col, cell in enumerate(self.targets[row]):
+            for col, cell in enumerate(self.cells[row]):
                 i = randint(0, 5)
                 bubble = Bubble(BUBBLES[i], cell.center, row, col)
                 cell.bubble = bubble
@@ -136,21 +136,21 @@ class Shooter:
 
     def recursive_from_right(self, angle, start, course):
         if (x := SCREEN.width - self.calculate_height(angle, start.y)) >= 0:
-            _ = self.find_destination(start, Point(x, 0), course)
+            _ = self.simulate_course(start, Point(x, 0), course, True)
             return
 
         bottom = self.calculate_bottom(angle, SCREEN.width)
         left_pt = Point(0, start.y - bottom)
-        if self.find_destination(start, left_pt, course):
+        if self.simulate_course(start, left_pt, course):
             return
 
         if (x := self.calculate_height(angle, left_pt.y)) <= SCREEN.width:
-            self.find_destination(left_pt, Point(x, 0), course)
+            _ = self.simulate_course(left_pt, Point(x, 0), course, True)
             return
 
         bottom = self.calculate_bottom(angle, SCREEN.width)
         right_pt = Point(SCREEN.width, left_pt.y - bottom)
-        if self.find_destination(left_pt, right_pt, course):
+        if self.simulate_course(left_pt, right_pt, course):
             return
 
         self.recursive_from_right(angle, right_pt, course)
@@ -158,26 +158,26 @@ class Shooter:
     def recursive_from_left(self, angle, start, course):
 
         if (x := self.calculate_height(angle, start.y)) <= SCREEN.width:
-            self.find_destination(start, Point(x, 0), course)
+            self.simulate_course(start, Point(x, 0), course, True)
             return
 
         bottom = self.calculate_bottom(angle, SCREEN.width)
         right_pt = Point(SCREEN.width, start.y - bottom)
-        if self.find_destination(start, right_pt, course):
+        if self.simulate_course(start, right_pt, course):
             return
 
         if (x := SCREEN.width - self.calculate_height(angle, right_pt.y)) >= 0:
-            _ = self.find_destination(right_pt, Point(x, 0), course)
+            _ = self.simulate_course(right_pt, Point(x, 0), course, True)
             return
 
         bottom = self.calculate_bottom(angle, SCREEN.width)
         left_pt = Point(0, right_pt.y - bottom)
-        if self.find_destination(right_pt, left_pt, course):
+        if self.simulate_course(right_pt, left_pt, course):
             return
 
         self.recursive_from_left(angle, left_pt, course)
 
-    def find_destination(self, start, end, course):
+    def simulate_course(self, start, end, course, no_bounce=False):
         """Return False if more lines have to be continuingly drawn.
            Args:
                start: Point
@@ -185,48 +185,36 @@ class Shooter:
                course: list
         """
         self.dest, self.target = self.check_targets(start, end)
-        if self.dest and not self.target:
-            course.append(Line(start, end))
-            return False
-        if self.dest and self.target:
+        if (self.dest and self.target) or (self.dest and no_bounce):
             cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
             course.append(Line(start, cross_point))
-        return True
-    
-
-
-    def simulate_line_course(self, start, end, course):
-        self.dest, self.target = self.check_targets(start, end)
-        if self.dest and not self.target:
+        elif self.dest and not self.target:
             course.append(Line(start, end))
             return False
-        if self.dest and self.target:
-            cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
-            course.append(Line(start, cross_point))
         return True
-        
+
     def update(self):
         self.course = []
         if 0 < self.launcher_angle <= self.limit_angle:
             y = SCREEN.height - self.calculate_height(self.launcher_angle, SCREEN.width // 2)
             pt = Point(SCREEN.width, y)
-            if not self.find_destination(self.launcher, pt, self.course):
-                self.recursive_from_right(90 - self.launcher_angle, pt, self.course)
+            if not self.simulate_course(self.launcher, pt, self.course):
+                self.recursive_from_right(90 - self.launcher_angle, pt, self.course)  
         elif self.launcher_angle >= 180 - self.limit_angle:
             y = SCREEN.height - self.calculate_height(180 - self.launcher_angle, SCREEN.width // 2)
             pt = Point(0, y)
-            if not self.find_destination(self.launcher, pt, self.course):
+            if not self.simulate_course(self.launcher, pt, self.course):
                 self.recursive_from_left(self.launcher_angle - 90, pt, self.course)
         else:
             if self.limit_angle < self.launcher_angle <= 90:
                 x = SCREEN.width // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN.height)
             elif 90 < self.launcher_angle < 180 - self.limit_angle:
                 x = SCREEN.width // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN.height)
-            _ = self.find_destination(self.launcher, Point(x, 0), self.course)
-
+            _ = self.simulate_course(self.launcher, Point(x, 0), self.course, True)
 
         if self.dest:
             for line in self.course:
+                print(line.start, line.end)
                 pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
@@ -261,13 +249,13 @@ class Shooter:
 
     def check_targets(self, pt1, pt2):
         dest = None
-        for cells in self.targets[::-1]:
+        for cells in self.cells[::-1]:
             for cell in cells:
                 if self.is_crossing(pt1, pt2, cell.left, cell.right):
                     if not cell.bubble:
                         dest = cell
                     else:
-                        print(dest, cell)
+                        # print(dest, cell)
                         return dest, cell
         return dest, None
 
@@ -371,7 +359,22 @@ class Bullet(pygame.sprite.Sprite):
         self.speed_y = 10
 
     def update(self):
-        if self.status in (Status.LAUNCHED, self.status.MOVE):
+        if self.status == Status.MOVE:
+            self.rect.centerx += self.speed_x
+            self.rect.centery += self.speed_y
+            if self.rect.left < SCREEN.left:
+                self.rect.left = SCREEN.left
+                self.speed_x = -self.speed_x
+
+            if self.rect.right > SCREEN.right:
+                self.rect.right = SCREEN.right
+                self.speed_x = -self.speed_x
+
+            if self.rect.top < SCREEN.top:
+                self.rect.top = SCREEN.top
+                self.speed_y = -self.speed_y
+
+        if self.status == Status.LAUNCHED:
             pt = self.course[self.idx]
             self.rect.centerx = pt.x
             self.rect.centery = pt.y
@@ -386,7 +389,18 @@ class Bullet(pygame.sprite.Sprite):
                 self.idx += 1
             else:
                 self.status = Status.STAY
+                self.shooter.dest.bubble = self
+
+                neighbors = []
+                self.check_color(self.shooter.dest, neighbors)
+                if len(neighbors) >= 3:
+                    for cell in neighbors:
+                        cell.bubble.status = Status.MOVE
+                        cell.bubble.move()
+                        cell.bubble = None
+                
                 self.shooter.status = Status.CHARGE
+
 
         # if self.status == Status.LAUNCHED:
         #     if pygame.splite.collide_rect(self, self.shooter.)
@@ -431,31 +445,94 @@ class Bullet(pygame.sprite.Sprite):
 
                 # self.shooter.status = Status.CHARGE
 
-    def check_color(self, row, col, neighbors):
-        if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
-            return
-        if self.shooter.targets[row][col] is None:
-            return
-        if self.shooter.targets[row][col].color != self.color:
-            return
-        if (row, col) in neighbors:
-            return
-        neighbors.append((row, col))
+    def drop_bubbles(self):
+        neighbors = []
+        
+    def check_color(self, cell, neighbors):
 
+        for cell in self.scan(cell.row, cell.col):
+            if cell not in neighbors:
+                neighbors.append(cell)
+                self.check_color(cell, neighbors)
+
+    def scan(self, row, col):
         if row % 2 == 0:
-            self.check_color(row - 1, col - 1, neighbors)
-            self.check_color(row - 1, col, neighbors)
-            self.check_color(row, col - 1, neighbors)
-            self.check_color(row, col + 1, neighbors)
-            self.check_color(row + 1, col - 1, neighbors)
-            self.check_color(row + 1, col, neighbors)
+            if row - 1 >= 0 and col - 1 >= 0:
+                cell = self.shooter.cells[row - 1][col - 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row - 1 >= 0:
+                cell = self.shooter.cells[row - 1][col]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row + 1 < ROWS and col - 1 >= 0:
+                cell = self.shooter.cells[row + 1][col - 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row + 1 < ROWS:
+                cell = self.shooter.cells[row + 1][col]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if col - 1 >= 0:
+                cell = self.shooter.cells[row][col - 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if col + 1 < COLS:
+                cell = self.shooter.cells[row][col + 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
         else:
-            self.check_color(row - 1, col, neighbors)
-            self.check_color(row - 1, col + 1, neighbors)
-            self.check_color(row, col - 1, neighbors)
-            self.check_color(row, col + 1, neighbors)
-            self.check_color(row + 1, col, neighbors)
-            self.check_color(row + 1, col + 1, neighbors)
+            if row - 1 >= 0 and col + 1 < COLS:
+                cell = self.shooter.cells[row - 1][col + 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row - 1 >= 0:
+                cell = self.shooter.cells[row - 1][col]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row + 1 < ROWS and col + 1 < COLS:
+                cell = self.shooter.cells[row + 1][col + 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if row + 1 < ROWS:
+                cell = self.shooter.cells[row + 1][col]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if col + 1 < COLS:
+                cell = self.shooter.cells[row][col + 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            if col - 1 >= 0:
+                cell = self.shooter.cells[row][col - 1]
+                if cell.bubble and cell.bubble.color == self.color:
+                    yield cell
+            
+
+        # if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
+        #     return
+        # cell = self.shooter.targets[row][col]
+        # if cell.bubble is None:
+        #     return
+        # if cell.bubble.color != self.color:
+        #     return
+        # if cell in neighbors:
+        #     return
+        # neighbors.append(cell)
+
+        # if row % 2 == 0:
+        #     self.check_color(row - 1, col - 1, neighbors)
+        #     self.check_color(row - 1, col, neighbors)
+        #     self.check_color(row, col - 1, neighbors)
+        #     self.check_color(row, col + 1, neighbors)
+        #     self.check_color(row + 1, col - 1, neighbors)
+        #     self.check_color(row + 1, col, neighbors)
+        # else:
+        #     self.check_color(row - 1, col, neighbors)
+        #     self.check_color(row - 1, col + 1, neighbors)
+        #     self.check_color(row, col - 1, neighbors)
+        #     self.check_color(row, col + 1, neighbors)
+        #     self.check_color(row + 1, col, neighbors)
+        #     self.check_color(row + 1, col + 1, neighbors)
 
 
 class Bubble(pygame.sprite.Sprite):
