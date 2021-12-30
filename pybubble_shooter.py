@@ -178,7 +178,7 @@ class Shooter:
         self.recursive_from_left(angle, left_pt, course)
 
     def find_destination(self, start, end, course):
-        """Return False if more lines are to be continuingly drawn.
+        """Return False if more lines have to be continuingly drawn.
            Args:
                start: Point
                end: Point
@@ -187,14 +187,24 @@ class Shooter:
         self.dest, self.target = self.check_targets(start, end)
         if self.dest and not self.target:
             course.append(Line(start, end))
-            # pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
             return False
         if self.dest and self.target:
             cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
             course.append(Line(start, cross_point))
-            # pygame.draw.line(self.screen, DARK_GREEN, line.start, cross_point, 2)
         return True
+    
 
+
+    def simulate_line_course(self, start, end, course):
+        self.dest, self.target = self.check_targets(start, end)
+        if self.dest and not self.target:
+            course.append(Line(start, end))
+            return False
+        if self.dest and self.target:
+            cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
+            course.append(Line(start, cross_point))
+        return True
+        
     def update(self):
         self.course = []
         if 0 < self.launcher_angle <= self.limit_angle:
@@ -202,22 +212,22 @@ class Shooter:
             pt = Point(SCREEN.width, y)
             if not self.find_destination(self.launcher, pt, self.course):
                 self.recursive_from_right(90 - self.launcher_angle, pt, self.course)
-        elif self.limit_angle < self.launcher_angle <= 90:
-            x = SCREEN.width // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN.height)
-            # pt = Point(x, 0)
-            _ = self.find_destination(self.launcher, Point(x, 0), self.course)
-        elif 90 < self.launcher_angle < 180 - self.limit_angle:
-            x = SCREEN.width // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN.height)
-            # pt = Point(x, 0)
-            _ = self.find_destination(self.launcher, Point(x, 0), self.course)
         elif self.launcher_angle >= 180 - self.limit_angle:
             y = SCREEN.height - self.calculate_height(180 - self.launcher_angle, SCREEN.width // 2)
             pt = Point(0, y)
             if not self.find_destination(self.launcher, pt, self.course):
                 self.recursive_from_left(self.launcher_angle - 90, pt, self.course)
+        else:
+            if self.limit_angle < self.launcher_angle <= 90:
+                x = SCREEN.width // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN.height)
+            elif 90 < self.launcher_angle < 180 - self.limit_angle:
+                x = SCREEN.width // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN.height)
+            _ = self.find_destination(self.launcher, Point(x, 0), self.course)
 
-        for line in self.course:
-            pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
+
+        if self.dest:
+            for line in self.course:
+                pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
             self.charge()
@@ -251,14 +261,14 @@ class Shooter:
 
     def check_targets(self, pt1, pt2):
         dest = None
-        for row, cells in zip(range(ROWS - 1, -1, -1), self.targets[::-1]):
-            for col, cell in enumerate(cells):
+        for cells in self.targets[::-1]:
+            for cell in cells:
                 if self.is_crossing(pt1, pt2, cell.left, cell.right):
                     if not cell.bubble:
                         dest = cell
                     else:
+                        print(dest, cell)
                         return dest, cell
-
         return dest, None
 
     def get_radius(self, bottom, height):
@@ -313,31 +323,47 @@ class Bullet(pygame.sprite.Sprite):
         self.random_generator = np.random.default_rng()
         self.idx = 0
 
-    def calculate_speed(self):
-        dx = self.line.end.x - self.rect.centerx
-        dy = self.line.end.y - self.rect.centery
-        distance = (dx ** 2 + dy ** 2) ** 0.5
-        vx = round_up(dx * 10 / distance)
-        vy = round_up(dy * 10 / distance)
-        return vx, vy
-
-    def decide_positions(self, start, end, move_on):
+    def decide_positions(self, start, end):
         dx = end.x - start.x
         dy = end.y - start.y
         distance = (dx**2 + dy ** 2) ** 0.5
         vx = dx * 10 / distance
         vy = dy * 10 / distance
-        x += vx
-        y += vy
+        x = start.x + vx
+        y = start.y + vy
 
-        if move_on(x, y):
+        if self.is_going(x, y):
             pass_pt = Point(x, y)
             yield pass_pt
-            yield from self.decide_positions(pass_pt, end, move_on)
+            yield from self.decide_positions(pass_pt, end)
         else:
-            yield end
+            yield self.shooter.dest.center
+            # yield end
+
+    def is_going(self, x, y):
+        """Override before calling decide_position method.
+        """
+
+    def select_func(self, start, end):
+        if start.x == end.x:
+            return lambda x, y: True if end.y < y else False
+        elif start.x > end.x:
+            return lambda x, y: True if x > end.x else False
+        else:
+            return lambda x, y: True if end.x > x else False
+
+    def simulate_course(self):
+        last = self.shooter.course[-1]
+        bullet_course = self.shooter.course[:-1] + [Line(last.start, self.shooter.dest.center)]
+
+        for line in bullet_course:
+            func = self.select_func(line.start, line.end)
+            self.is_going = func
+            for pt in self.decide_positions(line.start, line.end):
+                yield pt
 
     def shoot(self):
+        self.course = [pt for pt in self.simulate_course()]
         self.status = Status.LAUNCHED
 
     def move(self):
@@ -346,51 +372,24 @@ class Bullet(pygame.sprite.Sprite):
 
     def update(self):
         if self.status in (Status.LAUNCHED, self.status.MOVE):
-            vx, vy = self.calculate_speed()
-            self.rect.centerx += vx
-            self.rect.centery += vy
+            pt = self.course[self.idx]
+            self.rect.centerx = pt.x
+            self.rect.centery = pt.y
 
             if self.rect.left < SCREEN.left:
                 self.rect.left = SCREEN.left
-                self.idx += 1
-                self.line = self.shooter.course[self.idx]
 
             if self.rect.right > SCREEN.right:
                 self.rect.right = SCREEN.right
+
+            if self.idx + 1 < len(self.course):
                 self.idx += 1
-                self.line = self.shooter.course[self.idx]
-                # self.speed_x = -self.speed_x
+            else:
+                self.status = Status.STAY
+                self.shooter.status = Status.CHARGE
 
-            if self.rect.top < SCREEN.top:
-                self.rect.top = SCREEN.top
-                self.speed_y = -self.speed_y
-
-
-            # self.rect.centerx += self.speed_x
-            # self.rect.centery += self.speed_y
-
-            # if self.rect.left < SCREEN.left:
-            #     self.rect.left = SCREEN.left
-
-            #     print(self.shooter.launcher_angle, self.shooter.reflection_angle)
-            #     x, y = self.calculate_speed(90 - self.shooter.reflection_angle)
-            #     print(x, y)
-               
-            #     self.speed_x, self.speed_y = x, -y
-            #     # self.speed_x = -self.speed_x
-
-            # if self.rect.right > SCREEN.right:
-            #     self.rect.right = SCREEN.right
-            #     x, y = self.calculate_speed(90 + self.shooter.reflection_angle)
-            #     self.speed_x, self.speed_y = x, -y
-            #     # self.speed_x = -self.speed_x
-
-            # # if self.rect.top < SCREEN.top:
-            # #     self.rect.top = SCREEN.top
-            # #     self.speed_y = -self.speed_y
-        
-        if self.status == Status.LAUNCHED:
-            if pygame.splite.collide_rect(self, self.shooter.)
+        # if self.status == Status.LAUNCHED:
+        #     if pygame.splite.collide_rect(self, self.shooter.)
                 # collided.sort(key=lambda x: (x.row, x.col))
                 # bubble = collided[0]
 
@@ -407,30 +406,30 @@ class Bullet(pygame.sprite.Sprite):
                 # print(self.row, self.col)
                 # print(self.shooter.bubbles)
 
-                self.shooter.targets[self.row][self.col] = self
-                if self.row % 2 == 0:
-                    x_start = X_START_POS
-                else:
-                    x_start = X_START_POS + BUBBLE_SIZE / 2
-                y = Y_START_POS + BUBBLE_SIZE * self.row
-                x = x_start + BUBBLE_SIZE * self.col
-                self.rect.centerx = x
-                self.rect.centery = y
-                self.bubble_group.add(self)
-                neighbors = []
-                self.check_color(self.row, self.col, neighbors)
-                if len(neighbors) >= 3:
-                    for row, col in neighbors:
-                        bubble = self.shooter.targets[row][col]
-                        self.shooter.targets[row][col] = None
-                        bubble.status = Status.MOVE
-                        bubble.move()
-                else:
-                    self.speed_x = 0
-                    self.speed_y = 0
-                    self.status = Status.STAY
+                # self.shooter.targets[self.row][self.col] = self
+                # if self.row % 2 == 0:
+                #     x_start = X_START_POS
+                # else:
+                #     x_start = X_START_POS + BUBBLE_SIZE / 2
+                # y = Y_START_POS + BUBBLE_SIZE * self.row
+                # x = x_start + BUBBLE_SIZE * self.col
+                # self.rect.centerx = x
+                # self.rect.centery = y
+                # self.bubble_group.add(self)
+                # neighbors = []
+                # self.check_color(self.row, self.col, neighbors)
+                # if len(neighbors) >= 3:
+                #     for row, col in neighbors:
+                #         bubble = self.shooter.targets[row][col]
+                #         self.shooter.targets[row][col] = None
+                #         bubble.status = Status.MOVE
+                #         bubble.move()
+                # else:
+                #     self.speed_x = 0
+                #     self.speed_y = 0
+                #     self.status = Status.STAY
 
-                self.shooter.status = Status.CHARGE
+                # self.shooter.status = Status.CHARGE
 
     def check_color(self, row, col, neighbors):
         if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
