@@ -54,16 +54,6 @@ class Status(Enum):
     SHOT = auto()
 
 
-# Coordinates = namedtuple('Coordinates', 'x y')
-
-
-# class Point(Coordinates):
-
-#     @property
-#     def coords(self):
-#         return tuple(self)
-
-
 Point = namedtuple('Point', 'x y')
 Line = namedtuple('Line', 'start end')
 
@@ -134,87 +124,122 @@ class Shooter:
                 cell.bubble = bubble
         self.charge()
 
-    def recursive_from_right(self, angle, start, course):
-        if (x := SCREEN.width - self.calculate_height(angle, start.y)) >= 0:
-            _ = self.simulate_course(start, Point(x, 0), course, True)
-            return
-
-        bottom = self.calculate_bottom(angle, SCREEN.width)
-        left_pt = Point(0, start.y - bottom)
-        if self.simulate_course(start, left_pt, course):
-            return
-
-        if (x := self.calculate_height(angle, left_pt.y)) <= SCREEN.width:
-            _ = self.simulate_course(left_pt, Point(x, 0), course, True)
-            return
-
-        bottom = self.calculate_bottom(angle, SCREEN.width)
-        right_pt = Point(SCREEN.width, left_pt.y - bottom)
-        if self.simulate_course(left_pt, right_pt, course):
-            return
-
-        self.recursive_from_right(angle, right_pt, course)
-
-    def recursive_from_left(self, angle, start, course):
-
-        if (x := self.calculate_height(angle, start.y)) <= SCREEN.width:
-            self.simulate_course(start, Point(x, 0), course, True)
-            return
-
-        bottom = self.calculate_bottom(angle, SCREEN.width)
-        right_pt = Point(SCREEN.width, start.y - bottom)
-        if self.simulate_course(start, right_pt, course):
-            return
-
-        if (x := SCREEN.width - self.calculate_height(angle, right_pt.y)) >= 0:
-            _ = self.simulate_course(right_pt, Point(x, 0), course, True)
-            return
-
-        bottom = self.calculate_bottom(angle, SCREEN.width)
-        left_pt = Point(0, right_pt.y - bottom)
-        if self.simulate_course(right_pt, left_pt, course):
-            return
-
-        self.recursive_from_left(angle, left_pt, course)
-
-    def simulate_course(self, start, end, course, no_bounce=False):
-        """Return False if more lines have to be continuingly drawn.
+    def simulate_shoot_right(self, start, end):
+        """Yield lines on which a bullet shot to the right first will move.
            Args:
-               start: Point
-               end: Point
-               course: list
+             start (Point): at where a bullet is shot
+             end (Point): where a bullet will collid first with the screen right wall.
         """
-        self.dest, self.target = self.check_targets(start, end)
+        is_stop, line = self._simulate_course(start, end)
+
+        if line:
+            yield line
+        if not is_stop:
+            angle = 90 - self.launcher_angle
+            for line in self._simulate_bounce_course(angle, end, is_stop, True):
+                yield line
+
+    def simulate_shoot_left(self, start, end):
+        """Yield lines on which a bullet shot to the left first will move.
+           Args:
+             start (Point): at where a bullet is shot
+             end (Point): where a bullet will collid first with the screen right wall.
+        """
+        is_stop, line = self._simulate_course(start, end)
+
+        if line:
+            yield line
+        if not is_stop:
+            angle = self.launcher_angle - 90
+            for line in self._simulate_bounce_course(angle, end, is_stop, False):
+                yield line
+
+    def simulate_shoot_top(self, start, end):
+        """Yield a line on which a bullet shot to the top will move.
+           Args:
+             start (Point): at where a bullet is shot
+             end (Point): where a bullet will collid with the top of the screen.
+        """
+        _, line = self._simulate_course(start, end, True)
+
+        if line:
+            yield line
+
+    def _simulate_bounce_course(self, angle, start, is_stop, to_left):
+        """Simulate the bullet moving with repeated bounce to the screen walls.
+           Args:
+             angle (int): reflection angle
+             start (Point): where a bullet will collid with the screen walls
+             is_stop (bool): True any more lines are not to be drawn.
+             to_left (bool): True if bounce from right to left, False if left to right.
+        """
+        if not is_stop and to_left:
+            if (x := SCREEN.width - self.calculate_height(angle, start.y)) >= 0:
+                is_stop, line = self._simulate_course(start, Point(x, 0), True)
+                if line:
+                    yield line
+            else:
+                bottom = self.calculate_bottom(angle, SCREEN.width)
+                left_pt = Point(0, start.y - bottom)
+                is_stop, line = self._simulate_course(start, left_pt)
+                if line:
+                    yield line
+                if not is_stop:
+                    yield from self._simulate_bounce_course(angle, left_pt, is_stop, False)
+
+        if not is_stop and not to_left:
+            if (x := self.calculate_height(angle, start.y)) <= SCREEN.width:
+                is_stop, line = self._simulate_course(start, Point(x, 0), True)
+                if line:
+                    yield line
+            else:
+                bottom = self.calculate_bottom(angle, SCREEN.width)
+                right_pt = Point(SCREEN.width, start.y - bottom)
+                is_stop, line = self._simulate_course(start, right_pt)
+                if line:
+                    yield line
+                if not is_stop:
+                    yield from self._simulate_bounce_course(angle, right_pt, is_stop, True)
+
+    def _simulate_course(self, start, end, no_bounce=False):
+        """Simulate the movement of a bullet.
+           Args:
+             start (Point): the end of a line at where a bullet will start moving
+             end (Point): the end of a line at which a bullet will stop moving
+             no_bounce (bool): True if bullet will shoot to the top
+           Returns:
+             bool: False if more lines have to be continuingly drawn, otherwise True.
+             Line: a line on which a bullet will move
+        """
+        self.dest, self.target = self.find_destination(start, end)
+
         if (self.dest and self.target) or (self.dest and no_bounce):
             cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
-            course.append(Line(start, cross_point))
+            return True, Line(start, cross_point)
         elif self.dest and not self.target:
-            course.append(Line(start, end))
-            return False
-        return True
+            return False, Line(start, end)
+
+        return True, None
 
     def update(self):
-        self.course = []
         if 0 < self.launcher_angle <= self.limit_angle:
             y = SCREEN.height - self.calculate_height(self.launcher_angle, SCREEN.width // 2)
             pt = Point(SCREEN.width, y)
-            if not self.simulate_course(self.launcher, pt, self.course):
-                self.recursive_from_right(90 - self.launcher_angle, pt, self.course)  
+            self.course = [line for line in self.simulate_shoot_right(self.launcher, pt)]
         elif self.launcher_angle >= 180 - self.limit_angle:
             y = SCREEN.height - self.calculate_height(180 - self.launcher_angle, SCREEN.width // 2)
             pt = Point(0, y)
-            if not self.simulate_course(self.launcher, pt, self.course):
-                self.recursive_from_left(self.launcher_angle - 90, pt, self.course)
+            self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
         else:
             if self.limit_angle < self.launcher_angle <= 90:
                 x = SCREEN.width // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN.height)
             elif 90 < self.launcher_angle < 180 - self.limit_angle:
                 x = SCREEN.width // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN.height)
-            _ = self.simulate_course(self.launcher, Point(x, 0), self.course, True)
+            self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
 
         if self.dest:
             for line in self.course:
-                print(line.start, line.end)
+                # print(line.start, line.end)
                 pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
@@ -234,8 +259,8 @@ class Shooter:
 
         d = a0 * b2 - a2 * b0
         sn = b2 * (pt3.x - pt1.x) - a2 * (pt3.y - pt1.y)
-        x = pt1.x + a0 * sn / d
-        y = pt1.y + b0 * sn / d
+        x = round(pt1.x + a0 * sn / d)
+        y = round(pt1.y + b0 * sn / d)
 
         return Point(x, y)
 
@@ -247,7 +272,7 @@ class Shooter:
 
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
-    def check_targets(self, pt1, pt2):
+    def find_destination(self, pt1, pt2):
         dest = None
         for cells in self.cells[::-1]:
             for cell in cells:
@@ -255,7 +280,6 @@ class Shooter:
                     if not cell.bubble:
                         dest = cell
                     else:
-                        # print(dest, cell)
                         return dest, cell
         return dest, None
 
