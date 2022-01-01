@@ -14,7 +14,7 @@ SCREEN = Rect(0, 0, 526, 600)
 
 SCREEN_H = SCREEN.height
 SCREEN_W = SCREEN.width
- 
+
 
 # ROW_START = 16
 # COL_START = 15
@@ -216,6 +216,7 @@ class Shooter:
         """
         self.dest, self.target = self.find_destination(start, end)
         if (self.dest and self.target) or (self.dest and no_bounce):
+            # print(self.dest.row, self.dest.col, self.target.row, self.target.col)
             cross_point = self.find_cross_point(start, end, self.dest)
             return True, Line(start, cross_point)
         elif self.dest and not self.target:
@@ -419,6 +420,9 @@ class Bullet(pygame.sprite.Sprite):
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
 
+            if self.rect.top > SCREEN.bottom:
+                self.kill()
+
         if self.status == Status.LAUNCHED:
             pt = self.course[self.idx]
             self.rect.centerx = pt.x
@@ -434,150 +438,88 @@ class Bullet(pygame.sprite.Sprite):
                 self.idx += 1
             else:
                 self.shooter.dest.bubble = self
-                self.status = Status.STAY
+                self.status = Status.MOVE
+                self.drop_same_color_bubbles()
+                self.drop_floating_bubbles()
 
-                neighbors = []
-                self.check_color(self.shooter.dest, neighbors)
-                if len(neighbors) >= 3:
-                    for cell in neighbors:
-                        cell.bubble.status = Status.MOVE
-                        cell.bubble.move()
-                        cell.bubble = None
-                
+                # for line in self.shooter.cells:
+                #     print([cell.bubble for cell in line])
+
                 self.shooter.status = Status.CHARGE
 
+    def drop_bubbles(self, cells):
+        for cell in cells:
+            cell.bubble.status = Status.MOVE
+            cell.bubble.move()
+            cell.bubble = None
 
-        # if self.status == Status.LAUNCHED:
-        #     if pygame.splite.collide_rect(self, self.shooter.)
-                # collided.sort(key=lambda x: (x.row, x.col))
-                # bubble = collided[0]
+    def drop_same_color_bubbles(self):
+        cells = set()
+        self.scan_bubbles(self.shooter.dest, cells, True)
+        if len(cells) >= 3:
+            self.drop_bubbles(cells)
 
-                # if bubble.col > 0 and not self.shooter.bubbles[bubble.row][bubble.col - 1]:
-                #     self.row = bubble.row
-                #     self.col = bubble.col - 1
-                # elif bubble.col < COLS - 1 and not self.shooter.bubbles[bubble.row][bubble.col + 1]:
-                #     self.row = bubble.row
-                #     self.col = bubble.col - 1
-                # elif bubble.row < ROWS - 1:
-                #     self.row = bubble.row + 1
-                #     self.col = bubble.col
+    def drop_floating_bubbles(self):
+        if top := [cell for cell in self.shooter.cells[0] if cell.bubble]:
+            connected = set()
+            for cell in top:
+                self.scan_bubbles(cell, connected, False)
+            bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
+            diff = bubbles - connected
+            self.drop_bubbles(diff)
 
-                # print(self.row, self.col)
-                # print(self.shooter.bubbles)
+    def scan_bubbles(self, cell, cells, check_color):
+        for cell in self.scan(cell.row, cell.col, check_color):
+            if cell not in cells:
+                cells.add(cell)
+                self.scan_bubbles(cell, cells, check_color)
 
-                # self.shooter.targets[self.row][self.col] = self
-                # if self.row % 2 == 0:
-                #     x_start = X_START_POS
-                # else:
-                #     x_start = X_START_POS + BUBBLE_SIZE / 2
-                # y = Y_START_POS + BUBBLE_SIZE * self.row
-                # x = x_start + BUBBLE_SIZE * self.col
-                # self.rect.centerx = x
-                # self.rect.centery = y
-                # self.bubble_group.add(self)
-                # neighbors = []
-                # self.check_color(self.row, self.col, neighbors)
-                # if len(neighbors) >= 3:
-                #     for row, col in neighbors:
-                #         bubble = self.shooter.targets[row][col]
-                #         self.shooter.targets[row][col] = None
-                #         bubble.status = Status.MOVE
-                #         bubble.move()
-                # else:
-                #     self.speed_x = 0
-                #     self.speed_y = 0
-                #     self.status = Status.STAY
+    def _scan(self, row, col, check_color):
+        cell = self.shooter.cells[row][col]
+        if cell.bubble:
+            if cell.bubble.color == self.color or not check_color:
+                return cell
+        return None
 
-                # self.shooter.status = Status.CHARGE
-
-    def drop_bubbles(self):
-        neighbors = []
-        
-    def check_color(self, cell, neighbors):
-
-        for cell in self.scan(cell.row, cell.col):
-            if cell not in neighbors:
-                neighbors.append(cell)
-                self.check_color(cell, neighbors)
-
-    def scan(self, row, col):
+    def scan(self, row, col, check_color):
         if row % 2 == 0:
             if row - 1 >= 0 and col - 1 >= 0:
-                cell = self.shooter.cells[row - 1][col - 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row - 1, col - 1, check_color):
                     yield cell
             if row - 1 >= 0:
-                cell = self.shooter.cells[row - 1][col]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row - 1, col, check_color):
                     yield cell
             if row + 1 < ROWS and col - 1 >= 0:
-                cell = self.shooter.cells[row + 1][col - 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row + 1, col - 1, check_color):
                     yield cell
             if row + 1 < ROWS:
-                cell = self.shooter.cells[row + 1][col]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row + 1, col, check_color):
                     yield cell
             if col - 1 >= 0:
-                cell = self.shooter.cells[row][col - 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row, col - 1, check_color):
                     yield cell
             if col + 1 < COLS:
-                cell = self.shooter.cells[row][col + 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row, col + 1, check_color):
                     yield cell
         else:
             if row - 1 >= 0 and col + 1 < COLS:
-                cell = self.shooter.cells[row - 1][col + 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row - 1, col + 1, check_color):
                     yield cell
             if row - 1 >= 0:
-                cell = self.shooter.cells[row - 1][col]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row - 1, col, check_color):
                     yield cell
             if row + 1 < ROWS and col + 1 < COLS:
-                cell = self.shooter.cells[row + 1][col + 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row + 1, col + 1, check_color):
                     yield cell
             if row + 1 < ROWS:
-                cell = self.shooter.cells[row + 1][col]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row + 1, col, check_color):
                     yield cell
             if col + 1 < COLS:
-                cell = self.shooter.cells[row][col + 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row, col + 1, check_color):
                     yield cell
             if col - 1 >= 0:
-                cell = self.shooter.cells[row][col - 1]
-                if cell.bubble and cell.bubble.color == self.color:
+                if cell := self._scan(row, col - 1, check_color):
                     yield cell
-            
-
-        # if row < 0 or row > ROWS - 1 or col < 0 or col > COLS - 1:
-        #     return
-        # cell = self.shooter.targets[row][col]
-        # if cell.bubble is None:
-        #     return
-        # if cell.bubble.color != self.color:
-        #     return
-        # if cell in neighbors:
-        #     return
-        # neighbors.append(cell)
-
-        # if row % 2 == 0:
-        #     self.check_color(row - 1, col - 1, neighbors)
-        #     self.check_color(row - 1, col, neighbors)
-        #     self.check_color(row, col - 1, neighbors)
-        #     self.check_color(row, col + 1, neighbors)
-        #     self.check_color(row + 1, col - 1, neighbors)
-        #     self.check_color(row + 1, col, neighbors)
-        # else:
-        #     self.check_color(row - 1, col, neighbors)
-        #     self.check_color(row - 1, col + 1, neighbors)
-        #     self.check_color(row, col - 1, neighbors)
-        #     self.check_color(row, col + 1, neighbors)
-        #     self.check_color(row + 1, col, neighbors)
-        #     self.check_color(row + 1, col + 1, neighbors)
 
 
 class Bubble(pygame.sprite.Sprite):
@@ -598,8 +540,8 @@ class Bubble(pygame.sprite.Sprite):
         self.status = Status.STAY
 
     def move(self):
-        self.speed_x = randint(-5, 5)
-        self.speed_y = -10
+        self.speed_x = randint(-10, 10)
+        self.speed_y = -5
 
     def update(self):
         if self.status == Status.MOVE:
@@ -616,6 +558,9 @@ class Bubble(pygame.sprite.Sprite):
             if self.rect.top < SCREEN.top:
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
+
+            if self.rect.top > SCREEN.bottom:
+                self.kill()
 
 
 def main():
@@ -653,8 +598,6 @@ def main():
                     bubble_shooter.move_left()
                 if event.key == K_UP:
                     bubble_shooter.shoot()
-
-
         pygame.display.update()
 
 
