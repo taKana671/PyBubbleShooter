@@ -56,6 +56,7 @@ class Status(Enum):
 
 Point = namedtuple('Point', 'x y')
 Line = namedtuple('Line', 'start end')
+# Vector = namedtuple('Vector', 'x y')
 
 
 def round_up(value):
@@ -74,17 +75,19 @@ class Cell:
         self.row = row
         self.col = col
         self.calculate_center()
-        self.calculate_points()
+        self.calculate_sides()
 
-    def calculate_points(self):
+    def calculate_sides(self):
         half = BUBBLE_SIZE // 2
-        self.left = Point(self.center.x - half, self.center.y)
-        self.right = Point(self.center.x + half, self.center.y)
+        left_top = Point(self.center.x - half, self.center.y - half)
+        right_bottom = Point(self.center.x + half, self.center.y + half)
+        right_top = Point(self.center.x + half, self.center.y - half)
+        left_bottom = Point(self.center.x - half, self.center.y + half)
 
-        # self.left_top = Point(self.center.x - half, self.center.y - half)
-        # self.right_bottom = Point(self.center.x + half, self.center.y + half)
-        # self.right_top = Point(self.center.x + half, self.center.y - half)
-        # self.left_bottom = Point(self.center.x - half, self.center.y + half)
+        self.left = Line(left_top, left_bottom)
+        self.right = Line(right_top, right_bottom)
+        self.top = Line(left_top, right_top)
+        self.bottom = Line(left_bottom, right_bottom)
 
     def calculate_center(self):
         if self.row % 2 == 0:
@@ -107,7 +110,7 @@ class Shooter:
         self.bubble_group = bubble_group
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(1)
+        self.create_bubbles(5)
         self.status = Status.READY
 
     def create_variables(self):
@@ -212,9 +215,8 @@ class Shooter:
              Line: a line on which a bullet will move
         """
         self.dest, self.target = self.find_destination(start, end)
-
         if (self.dest and self.target) or (self.dest and no_bounce):
-            cross_point = self.find_cross_point(start, end, self.dest.left, self.dest.right)
+            cross_point = self.find_cross_point(start, end, self.dest)
             return True, Line(start, cross_point)
         elif self.dest and not self.target:
             return False, Line(start, end)
@@ -239,7 +241,7 @@ class Shooter:
 
         if self.dest:
             for line in self.course:
-                # print(line.start, line.end)
+                # print(line.start.row, line.start.col, line.end.row, line.end.col)
                 pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
@@ -251,7 +253,7 @@ class Shooter:
         # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
         self.bullet = Bullet(BUBBLES[i], SCREEN.width // 2, SCREEN.height, self.bubble_group, self)
 
-    def find_cross_point(self, pt1, pt2, pt3, pt4):
+    def _find_cross_point(self, pt1, pt2, pt3, pt4):
         a0 = pt2.x - pt1.x
         b0 = pt2.y - pt1.y
         a2 = pt4.x - pt3.x
@@ -264,7 +266,20 @@ class Shooter:
 
         return Point(x, y)
 
-    def is_crossing(self, pt1, pt2, pt3, pt4):
+    def _find_points(self, pt1, pt2, cell):
+        for line in (cell.lower_left, cell.lower_right, cell.upper_left, cell.upper_right):
+            if self._is_crossing(pt1, pt2, line.start, line.end):
+                yield self._find_cross_point(pt1, pt2, line.start, line.end)
+
+    def find_cross_point(self, pt1, pt2, cell):
+        for line in (cell.bottom, cell.right, cell.left, cell.top):
+            if self._is_crossing(pt1, pt2, line.start, line.end):
+                pt = self._find_cross_point(pt1, pt2, line.start, line.end)
+                x = round((pt.x + cell.center.x) / 2)
+                y = round((pt.y + cell.center.y) / 2)
+                return Point(x, y)
+
+    def _is_crossing(self, pt1, pt2, pt3, pt4):
         tc1 = (pt1.x - pt2.x) * (pt3.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - pt3.x)
         tc2 = (pt1.x - pt2.x) * (pt4.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - pt4.x)
         td1 = (pt3.x - pt4.x) * (pt1.y - pt3.y) + (pt3.y - pt4.y) * (pt3.x - pt1.x)
@@ -272,11 +287,17 @@ class Shooter:
 
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
+    def is_crossing(self, pt1, pt2, cell):
+        for line in (cell.bottom, cell.right, cell.left, cell.top):
+            if self._is_crossing(pt1, pt2, line.start, line.end):
+                return True
+        return False
+
     def find_destination(self, pt1, pt2):
         dest = None
         for cells in self.cells[::-1]:
             for cell in cells:
-                if self.is_crossing(pt1, pt2, cell.left, cell.right):
+                if self.is_crossing(pt1, pt2, cell):
                     if not cell.bubble:
                         dest = cell
                     else:
@@ -307,7 +328,7 @@ class Shooter:
 
     def shoot(self):
         # if self.bullet.status == Status.READY:
-        if self.status == Status.READY:
+        if self.status == Status.READY and self.dest:
             self.status = Status.SHOT
             self.bullet.shoot()
 
@@ -379,8 +400,8 @@ class Bullet(pygame.sprite.Sprite):
         self.status = Status.LAUNCHED
 
     def move(self):
-        self.speed_x = randint(-5, 5)
-        self.speed_y = 10
+        self.speed_x = randint(-10, 10)
+        self.speed_y = 5
 
     def update(self):
         if self.status == Status.MOVE:
@@ -412,8 +433,8 @@ class Bullet(pygame.sprite.Sprite):
             if self.idx + 1 < len(self.course):
                 self.idx += 1
             else:
-                self.status = Status.STAY
                 self.shooter.dest.bubble = self
+                self.status = Status.STAY
 
                 neighbors = []
                 self.check_color(self.shooter.dest, neighbors)
