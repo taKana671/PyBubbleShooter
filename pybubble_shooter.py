@@ -110,7 +110,7 @@ class Shooter:
         self.bubble_group = bubble_group
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(5)
+        self.create_bubbles(3)
         self.status = Status.READY
 
     def create_variables(self):
@@ -242,7 +242,7 @@ class Shooter:
 
         if self.dest:
             for line in self.course:
-                # print(line.start.row, line.start.col, line.end.row, line.end.col)
+                # print(line.start, line.end)
                 pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
@@ -267,11 +267,6 @@ class Shooter:
 
         return Point(x, y)
 
-    def _find_points(self, pt1, pt2, cell):
-        for line in (cell.lower_left, cell.lower_right, cell.upper_left, cell.upper_right):
-            if self._is_crossing(pt1, pt2, line.start, line.end):
-                yield self._find_cross_point(pt1, pt2, line.start, line.end)
-
     def find_cross_point(self, pt1, pt2, cell):
         for line in (cell.bottom, cell.right, cell.left, cell.top):
             if self._is_crossing(pt1, pt2, line.start, line.end):
@@ -294,16 +289,40 @@ class Shooter:
                 return True
         return False
 
-    def find_destination(self, pt1, pt2):
-        dest = None
+    def _trace(self, pt1, pt2):
         for cells in self.cells[::-1]:
             for cell in cells:
                 if self.is_crossing(pt1, pt2, cell):
-                    if not cell.bubble:
-                        dest = cell
-                    else:
-                        return dest, cell
-        return dest, None
+                    yield cell
+                    if cell.bubble:
+                        return
+
+    def find_destination(self, pt1, pt2):
+        """Return destination, target
+        """
+        if traced := [cell for cell in self._trace(pt1, pt2)]:
+            if len(traced) == 1:
+                return None, None
+            elif not any(cell.bubble for cell in traced):
+                return traced[-1], None
+            else:
+                dest, target = traced[-2:]
+                return dest, target
+
+        return None, None
+
+    # def find_destination(self, pt1, pt2):
+    #     dest = None
+    #     for cells in self.cells[::-1]:
+    #         for cell in cells:
+    #             if self.is_crossing(pt1, pt2, cell):
+    #                 if not cell.bubble:
+    #                     # print(cell.row, cell.col, cell.bubble)
+    #                     dest = cell
+    #                 else:
+    #                     # print(cell.row, cell.col, cell.bubble)
+    #                     return dest, cell
+    #     return dest, None
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -438,9 +457,10 @@ class Bullet(pygame.sprite.Sprite):
                 self.idx += 1
             else:
                 self.shooter.dest.bubble = self
-                self.status = Status.MOVE
-                self.drop_same_color_bubbles()
-                self.drop_floating_bubbles()
+                if self.shooter.target:
+                    self.status = Status.MOVE
+                    self.drop_same_color_bubbles()
+                    self.drop_floating_bubbles()
 
                 # for line in self.shooter.cells:
                 #     print([cell.bubble for cell in line])
