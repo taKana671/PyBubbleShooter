@@ -16,9 +16,6 @@ SCREEN_H = SCREEN.height
 SCREEN_W = SCREEN.width
 
 
-# ROW_START = 16
-# COL_START = 15
-
 Y_START_POS = 15
 X_START_POS = 16
 
@@ -56,7 +53,6 @@ class Status(Enum):
 
 Point = namedtuple('Point', 'x y')
 Line = namedtuple('Line', 'start end')
-# Vector = namedtuple('Vector', 'x y')
 
 
 def round_up(value):
@@ -110,7 +106,7 @@ class Shooter:
         self.bubble_group = bubble_group
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(3)
+        self.create_bubbles(1)
         self.status = Status.READY
 
     def create_variables(self):
@@ -216,12 +212,10 @@ class Shooter:
         """
         self.dest, self.target = self.find_destination(start, end)
         if (self.dest and self.target) or (self.dest and no_bounce):
-            # print(self.dest.row, self.dest.col, self.target.row, self.target.col)
             cross_point = self.find_cross_point(start, end, self.dest)
             return True, Line(start, cross_point)
         elif self.dest and not self.target:
             return False, Line(start, end)
-
         return True, None
 
     def update(self):
@@ -290,6 +284,12 @@ class Shooter:
         return False
 
     def _trace(self, pt1, pt2):
+        """Yield cells on which the simulation line will pass,
+           from bottom to top.
+           Args:
+             pt1 (Point): one end of a simulation line
+             pt2 (Point): the another end of a simulation line
+        """
         for cells in self.cells[::-1]:
             for cell in cells:
                 if self.is_crossing(pt1, pt2, cell):
@@ -298,7 +298,11 @@ class Shooter:
                         return
 
     def find_destination(self, pt1, pt2):
-        """Return destination, target
+        """Return a destination cell into which a bullet go, and
+           a target cell with which the bullet will collid.
+           Args:
+             pt1 (Point): one end of a simulation line
+             pt2 (Point): the another end of a simulation line
         """
         if traced := [cell for cell in self._trace(pt1, pt2)]:
             if len(traced) == 1:
@@ -308,21 +312,30 @@ class Shooter:
             else:
                 dest, target = traced[-2:]
                 return dest, target
-
         return None, None
 
-    # def find_destination(self, pt1, pt2):
-    #     dest = None
-    #     for cells in self.cells[::-1]:
-    #         for cell in cells:
-    #             if self.is_crossing(pt1, pt2, cell):
-    #                 if not cell.bubble:
-    #                     # print(cell.row, cell.col, cell.bubble)
-    #                     dest = cell
-    #                 else:
-    #                     # print(cell.row, cell.col, cell.bubble)
-    #                     return dest, cell
-    #     return dest, None
+    def correct_destination(self, dest, target):
+        """If the destination and target of a bullet are not close,
+           attempt to correct the destination.
+           Args:
+             dest (Cell): a destination cell into which a bullet go
+             target (Cell): a target cell with which the bullet will collid
+        """
+        if target.row % 2 == 0:
+            if 0 < dest.col < target.col - 1:
+                if not (cell := self.cells[dest.row][target.col - 1]).bubble:
+                    return cell
+            if dest.col > target.col:
+                if not (cell := self.cells[dest.row][target.col]).bubble:
+                    return cell
+        else:
+            if dest.col < target.col:
+                if not (cell := self.cells[dest.row][target.col]).bubble:
+                    return cell
+            if target.col + 1 < dest.col < COLS - 1:
+                if not (cell := self.cells[dest.row][target.col + 1]).bubble:
+                    return cell
+        return None
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -349,6 +362,9 @@ class Shooter:
     def shoot(self):
         # if self.bullet.status == Status.READY:
         if self.status == Status.READY and self.dest:
+            # if self.target:
+            #     if dest := self.correct_destination(self.dest, self.target):
+            #         self.dest = dest
             self.status = Status.SHOT
             self.bullet.shoot()
 
@@ -358,7 +374,6 @@ class Bullet(pygame.sprite.Sprite):
     # bubble_group = None
 
     def __init__(self, bubble_kit, x, y, bubble_group, shooter):
-    # def __init__(self, bubble_kit, x, y, shooter):
         super().__init__(self.containers)
         self.image = pygame.image.load(bubble_kit.file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
@@ -391,7 +406,6 @@ class Bullet(pygame.sprite.Sprite):
             yield from self.decide_positions(pass_pt, end)
         else:
             yield self.shooter.dest.center
-            # yield end
 
     def is_going(self, x, y):
         """Override before calling decide_position method.
@@ -457,14 +471,10 @@ class Bullet(pygame.sprite.Sprite):
                 self.idx += 1
             else:
                 self.shooter.dest.bubble = self
-                if self.shooter.target:
-                    self.status = Status.MOVE
-                    self.drop_same_color_bubbles()
-                    self.drop_floating_bubbles()
+                self.status = Status.STAY
 
-                # for line in self.shooter.cells:
-                #     print([cell.bubble for cell in line])
-
+                self.drop_same_color_bubbles()
+                self.drop_floating_bubbles()
                 self.shooter.status = Status.CHARGE
 
     def drop_bubbles(self, cells):
@@ -476,12 +486,13 @@ class Bullet(pygame.sprite.Sprite):
     def drop_same_color_bubbles(self):
         cells = set()
         self.scan_bubbles(self.shooter.dest, cells, True)
+        # print('same color', [(c.row, c.col) for c in cells])
         if len(cells) >= 3:
             self.drop_bubbles(cells)
 
     def drop_floating_bubbles(self):
         if top := [cell for cell in self.shooter.cells[0] if cell.bubble]:
-            connected = set()
+            connected = set(top)
             for cell in top:
                 self.scan_bubbles(cell, connected, False)
             bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
@@ -502,7 +513,20 @@ class Bullet(pygame.sprite.Sprite):
         return None
 
     def scan(self, row, col, check_color):
-        if row % 2 == 0:
+        if row == 0:
+            if col - 1 >= 0:
+                if cell := self._scan(row, col - 1, check_color):
+                    yield cell
+            if col + 1 < COLS:
+                if cell := self._scan(row, col + 1, check_color):
+                    yield cell
+            if row + 1 < ROWS and col - 1 >= 0:
+                if cell := self._scan(row + 1, col - 1, check_color):
+                    yield cell
+            if row + 1 < ROWS:
+                if cell := self._scan(row + 1, col, check_color):
+                    yield cell
+        elif row % 2 == 0:
             if row - 1 >= 0 and col - 1 >= 0:
                 if cell := self._scan(row - 1, col - 1, check_color):
                     yield cell
