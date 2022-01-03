@@ -102,7 +102,7 @@ class Shooter:
         self.target = None
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(15)
+        self.create_bubbles(5)
         self.status = Status.READY
 
     def create_variables(self):
@@ -209,8 +209,11 @@ class Shooter:
         """
         self.dest, self.target = self.find_destination(start, end)
         if (self.dest and self.target) or (self.dest and no_bounce):
-            cross_point = self.find_cross_point(start, end, self.dest)
-            return True, Line(start, cross_point)
+            if cross_point := self.find_cross_point(start, end, self.dest):
+                return True, Line(start, cross_point)
+            return True, Line(start, self.dest.center)
+            # cross_point = self.find_cross_point(start, end, self.dest)
+            # return True, Line(start, cross_point)
         elif self.dest and not self.target:
             return False, Line(start, end)
         return True, None
@@ -265,6 +268,7 @@ class Shooter:
                 x = round((pt.x + cell.center.x) / 2)
                 y = round((pt.y + cell.center.y) / 2)
                 return Point(x, y)
+        return None
 
     def _is_crossing(self, pt1, pt2, pt3, pt4):
         tc1 = (pt1.x - pt2.x) * (pt3.y - pt1.y) + (pt1.y - pt2.y) * (pt1.x - pt3.x)
@@ -294,6 +298,14 @@ class Shooter:
                     if cell.bubble:
                         return
 
+    def _find_destination(self, target, candidates):
+        if len(neighbors := [cell for cell in self.scan(target.row, target.col)]) > 2:
+            for cell in candidates:
+                if cell in neighbors:
+                    return cell
+            return neighbors[0]
+        return None
+
     def find_destination(self, pt1, pt2):
         """Return a destination cell into which a bullet go, and
            a target cell with which the bullet will collid.
@@ -308,8 +320,64 @@ class Shooter:
                 return traced[-1], None
             else:
                 dest, target = traced[-2:]
+                if target.row > 0:
+                    if candidate := self._find_destination(target, traced[:-1]):
+                        dest = candidate
                 return dest, target
         return None, None
+
+    def scan(self, row, col):
+        if row == 0:
+            if row + 1 < ROWS and col - 1 >= 0:
+                if not (cell := self.cells[row + 1][col - 1]).bubble:
+                    yield cell
+            if row + 1 < ROWS:
+                if not (cell := self.cells[row + 1][col]).bubble:
+                    yield cell
+            if col - 1 >= 0:
+                if not (cell := self.cells[row][col - 1]).bubble:
+                    yield cell
+            if col + 1 < COLS:
+                if not (cell := self.cells[row][col + 1]).bubble:
+                    yield cell
+        elif row % 2 == 0:
+            if row + 1 < ROWS and col - 1 >= 0:
+                if not (cell := self.cells[row + 1][col - 1]).bubble:
+                    yield cell
+            if row + 1 < ROWS:
+                if not (cell := self.cells[row + 1][col]).bubble:
+                    yield cell
+            if col - 1 >= 0:
+                if not (cell := self.cells[row][col - 1]).bubble:
+                    yield cell
+            if col + 1 < COLS:
+                if not (cell := self.cells[row][col + 1]).bubble:
+                    yield cell
+            if row - 1 >= 0 and col - 1 >= 0:
+                if not (cell := self.cells[row - 1][col - 1]).bubble:
+                    yield cell
+            if row - 1 >= 0:
+                if not (cell := self.cells[row - 1][col]).bubble:
+                    yield cell
+        else:
+            if row + 1 < ROWS and col + 1 < COLS:
+                if not (cell := self.cells[row + 1][col + 1]).bubble:
+                    yield cell
+            if row + 1 < ROWS:
+                if not (cell := self.cells[row + 1][col]).bubble:
+                    yield cell
+            if col + 1 < COLS:
+                if not (cell := self.cells[row][col + 1]).bubble:
+                    yield cell
+            if col - 1 >= 0:
+                if not (cell := self.cells[row][col - 1]).bubble:
+                    yield cell
+            if row - 1 >= 0 and col + 1 < COLS:
+                if not (cell := self.cells[row - 1][col + 1]).bubble:
+                    yield cell
+            if row - 1 >= 0:
+                if not (cell := self.cells[row - 1][col]).bubble:
+                    yield cell
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -494,44 +562,38 @@ class Bullet(BaseBubble):
 
     def scan(self, row, col, check_color):
         if row == 0:
-            if col - 1 >= 0:
-                if cell := self._scan(row, col - 1, check_color):
-                    yield cell
-            if col + 1 < COLS:
-                if cell := self._scan(row, col + 1, check_color):
-                    yield cell
             if row + 1 < ROWS and col - 1 >= 0:
                 if cell := self._scan(row + 1, col - 1, check_color):
                     yield cell
             if row + 1 < ROWS:
                 if cell := self._scan(row + 1, col, check_color):
                     yield cell
+            if col - 1 >= 0:
+                if cell := self._scan(row, col - 1, check_color):
+                    yield cell
+            if col + 1 < COLS:
+                if cell := self._scan(row, col + 1, check_color):
+                    yield cell
         elif row % 2 == 0:
+            if row + 1 < ROWS and col - 1 >= 0:
+                if cell := self._scan(row + 1, col - 1, check_color):
+                    yield cell
+            if row + 1 < ROWS:
+                if cell := self._scan(row + 1, col, check_color):
+                    yield cell
+            if col - 1 >= 0:
+                if cell := self._scan(row, col - 1, check_color):
+                    yield cell
+            if col + 1 < COLS:
+                if cell := self._scan(row, col + 1, check_color):
+                    yield cell
             if row - 1 >= 0 and col - 1 >= 0:
                 if cell := self._scan(row - 1, col - 1, check_color):
                     yield cell
             if row - 1 >= 0:
                 if cell := self._scan(row - 1, col, check_color):
                     yield cell
-            if row + 1 < ROWS and col - 1 >= 0:
-                if cell := self._scan(row + 1, col - 1, check_color):
-                    yield cell
-            if row + 1 < ROWS:
-                if cell := self._scan(row + 1, col, check_color):
-                    yield cell
-            if col - 1 >= 0:
-                if cell := self._scan(row, col - 1, check_color):
-                    yield cell
-            if col + 1 < COLS:
-                if cell := self._scan(row, col + 1, check_color):
-                    yield cell
         else:
-            if row - 1 >= 0 and col + 1 < COLS:
-                if cell := self._scan(row - 1, col + 1, check_color):
-                    yield cell
-            if row - 1 >= 0:
-                if cell := self._scan(row - 1, col, check_color):
-                    yield cell
             if row + 1 < ROWS and col + 1 < COLS:
                 if cell := self._scan(row + 1, col + 1, check_color):
                     yield cell
@@ -544,6 +606,12 @@ class Bullet(BaseBubble):
             if col - 1 >= 0:
                 if cell := self._scan(row, col - 1, check_color):
                     yield cell
+            if row - 1 >= 0 and col + 1 < COLS:
+                if cell := self._scan(row - 1, col + 1, check_color):
+                    yield cell
+            if row - 1 >= 0:
+                if cell := self._scan(row - 1, col, check_color):
+                    yield cell
 
 
 def main():
@@ -555,8 +623,6 @@ def main():
 
     Bubble.containers = bubbles
     Bullet.containers = bullets
-    # Bullet.bubble_group = bubbles
-    # ball = Ball('images/ball_pink.png')
     bubble_shooter = Shooter(screen)
     clock = pygame.time.Clock()
     pygame.key.set_repeat(500, 100)
