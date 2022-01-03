@@ -6,8 +6,6 @@ from enum import Enum, auto
 from pygame.locals import QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, KEYDOWN, MOUSEBUTTONDOWN, Rect
 from random import randint
 
-import numpy as np
-
 
 # screen
 SCREEN = Rect(0, 0, 526, 600)
@@ -67,7 +65,6 @@ class Cell:
 
     def __init__(self, row, col):
         self.bubble = None
-        self.drop = False
         self.row = row
         self.col = col
         self.calculate_center()
@@ -97,16 +94,15 @@ class Cell:
 
 class Shooter:
 
-    def __init__(self, screen, bubble_group):
+    def __init__(self, screen):
         self.screen = screen
         self.launcher_angle = 90
         self.reflection_angle = None
         self.dest = None
         self.target = None
-        self.bubble_group = bubble_group
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_variables()
-        self.create_bubbles(1)
+        self.create_bubbles(15)
         self.status = Status.READY
 
     def create_variables(self):
@@ -119,7 +115,8 @@ class Shooter:
         for row in range(rows):
             for col, cell in enumerate(self.cells[row]):
                 i = randint(0, 5)
-                bubble = Bubble(BUBBLES[i], cell.center, row, col)
+                kit = BUBBLES[i]
+                bubble = Bubble(kit.file, kit.color, cell.center)
                 cell.bubble = bubble
         self.charge()
 
@@ -245,8 +242,8 @@ class Shooter:
 
     def charge(self):
         i = randint(0, 5)
-        # self.bullet = Bullet(BUBBLES[index], 205, 600, self)
-        self.bullet = Bullet(BUBBLES[i], SCREEN.width // 2, SCREEN.height, self.bubble_group, self)
+        kit = BUBBLES[i]
+        self.bullet = Bullet(kit.file, kit.color, self.launcher, self)
 
     def _find_cross_point(self, pt1, pt2, pt3, pt4):
         a0 = pt2.x - pt1.x
@@ -314,29 +311,6 @@ class Shooter:
                 return dest, target
         return None, None
 
-    def correct_destination(self, dest, target):
-        """If the destination and target of a bullet are not close,
-           attempt to correct the destination.
-           Args:
-             dest (Cell): a destination cell into which a bullet go
-             target (Cell): a target cell with which the bullet will collid
-        """
-        if target.row % 2 == 0:
-            if 0 < dest.col < target.col - 1:
-                if not (cell := self.cells[dest.row][target.col - 1]).bubble:
-                    return cell
-            if dest.col > target.col:
-                if not (cell := self.cells[dest.row][target.col]).bubble:
-                    return cell
-        else:
-            if dest.col < target.col:
-                if not (cell := self.cells[dest.row][target.col]).bubble:
-                    return cell
-            if target.col + 1 < dest.col < COLS - 1:
-                if not (cell := self.cells[dest.row][target.col + 1]).bubble:
-                    return cell
-        return None
-
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
 
@@ -362,33 +336,59 @@ class Shooter:
     def shoot(self):
         # if self.bullet.status == Status.READY:
         if self.status == Status.READY and self.dest:
-            # if self.target:
-            #     if dest := self.correct_destination(self.dest, self.target):
-            #         self.dest = dest
             self.status = Status.SHOT
             self.bullet.shoot()
 
 
-class Bullet(pygame.sprite.Sprite):
+class BaseBubble(pygame.sprite.Sprite):
 
-    # bubble_group = None
-
-    def __init__(self, bubble_kit, x, y, bubble_group, shooter):
+    def __init__(self, file, color, center):
         super().__init__(self.containers)
-        self.image = pygame.image.load(bubble_kit.file).convert_alpha()
+        self.image = pygame.image.load(file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
         self.rect = self.image.get_rect()
-        self.rect.centerx = x
-        self.rect.centery = y
-        self.status = Status.READY
-        self.bubble_group = bubble_group
-        self.color = bubble_kit.color
-        self.shooter = shooter
+        self.rect.centerx = center.x
+        self.rect.centery = center.y
         self.speed_x = 0
         self.speed_y = 0
-        self.row = None
-        self.col = None
-        self.random_generator = np.random.default_rng()
+        self.color = color
+        self.status = Status.STAY
+
+    def move(self):
+        self.speed_x = randint(-10, 10)
+        self.speed_y = 5
+
+    def update(self):
+        if self.status == Status.MOVE:
+            self.rect.centerx += self.speed_x
+            self.rect.centery += self.speed_y
+            if self.rect.left < SCREEN.left:
+                self.rect.left = SCREEN.left
+                self.speed_x = -self.speed_x
+
+            if self.rect.right > SCREEN.right:
+                self.rect.right = SCREEN.right
+                self.speed_x = -self.speed_x
+
+            if self.rect.top < SCREEN.top:
+                self.rect.top = SCREEN.top
+                self.speed_y = -self.speed_y
+
+            if self.rect.top > SCREEN.bottom:
+                self.kill()
+
+
+class Bubble(BaseBubble):
+
+    def __init__(self, file, color, center):
+        super().__init__(file, color, center)
+
+
+class Bullet(BaseBubble):
+
+    def __init__(self, file, color, center, shooter):
+        super().__init__(file, color, center)
+        self.shooter = shooter
         self.idx = 0
 
     def decide_positions(self, start, end):
@@ -433,28 +433,9 @@ class Bullet(pygame.sprite.Sprite):
         self.course = [pt for pt in self.simulate_course()]
         self.status = Status.LAUNCHED
 
-    def move(self):
-        self.speed_x = randint(-10, 10)
-        self.speed_y = 5
-
     def update(self):
         if self.status == Status.MOVE:
-            self.rect.centerx += self.speed_x
-            self.rect.centery += self.speed_y
-            if self.rect.left < SCREEN.left:
-                self.rect.left = SCREEN.left
-                self.speed_x = -self.speed_x
-
-            if self.rect.right > SCREEN.right:
-                self.rect.right = SCREEN.right
-                self.speed_x = -self.speed_x
-
-            if self.rect.top < SCREEN.top:
-                self.rect.top = SCREEN.top
-                self.speed_y = -self.speed_y
-
-            if self.rect.top > SCREEN.bottom:
-                self.kill()
+            super().update()
 
         if self.status == Status.LAUNCHED:
             pt = self.course[self.idx]
@@ -479,14 +460,13 @@ class Bullet(pygame.sprite.Sprite):
 
     def drop_bubbles(self, cells):
         for cell in cells:
-            cell.bubble.status = Status.MOVE
             cell.bubble.move()
+            cell.bubble.status = Status.MOVE
             cell.bubble = None
 
     def drop_same_color_bubbles(self):
         cells = set()
         self.scan_bubbles(self.shooter.dest, cells, True)
-        # print('same color', [(c.row, c.col) for c in cells])
         if len(cells) >= 3:
             self.drop_bubbles(cells)
 
@@ -566,58 +546,18 @@ class Bullet(pygame.sprite.Sprite):
                     yield cell
 
 
-class Bubble(pygame.sprite.Sprite):
-
-    def __init__(self, bubble_kit, center, row, col):
-        super().__init__(self.containers)
-        # self.screen = screen
-        self.image = pygame.image.load(bubble_kit.file).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
-        self.rect = self.image.get_rect()
-        self.rect.centerx = center.x
-        self.rect.centery = center.y
-        self.row = row
-        self.col = col
-        self.speed_x = None
-        self.speed_y = None
-        self.color = bubble_kit.color
-        self.status = Status.STAY
-
-    def move(self):
-        self.speed_x = randint(-10, 10)
-        self.speed_y = -5
-
-    def update(self):
-        if self.status == Status.MOVE:
-            self.rect.centerx += self.speed_x
-            self.rect.centery += self.speed_y
-            if self.rect.left < SCREEN.left:
-                self.rect.left = SCREEN.left
-                self.speed_x = -self.speed_x
-
-            if self.rect.right > SCREEN.right:
-                self.rect.right = SCREEN.right
-                self.speed_x = -self.speed_x
-
-            if self.rect.top < SCREEN.top:
-                self.rect.top = SCREEN.top
-                self.speed_y = -self.speed_y
-
-            if self.rect.top > SCREEN.bottom:
-                self.kill()
-
-
 def main():
     pygame.init()
     screen = pygame.display.set_mode(SCREEN.size)
     pygame.display.set_caption('PyBubbleShooter')
     bubbles = pygame.sprite.RenderUpdates()
     bullets = pygame.sprite.RenderUpdates()
+
     Bubble.containers = bubbles
     Bullet.containers = bullets
     # Bullet.bubble_group = bubbles
     # ball = Ball('images/ball_pink.png')
-    bubble_shooter = Shooter(screen, bubbles)
+    bubble_shooter = Shooter(screen)
     clock = pygame.time.Clock()
     pygame.key.set_repeat(500, 100)
 
