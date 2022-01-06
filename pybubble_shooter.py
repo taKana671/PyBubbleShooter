@@ -9,10 +9,9 @@ from random import randint
 
 # screen
 SCREEN = Rect(0, 0, 526, 600)
-
 SCREEN_H = SCREEN.height
 SCREEN_W = SCREEN.width
-
+HALF_SCREEN_W = SCREEN.width // 2
 
 Y_START_POS = 15
 X_START_POS = 16
@@ -96,20 +95,20 @@ class Shooter:
 
     def __init__(self, screen):
         self.screen = screen
-        self.launcher_angle = 90
         self.reflection_angle = None
         self.dest = None
         self.target = None
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
-        self.create_variables()
-        self.create_bubbles(5)
+        self.create_launcher()
+        self.create_bubbles(10)
         self.status = Status.READY
 
-    def create_variables(self):
-        self.launcher = Point(SCREEN_W // 2, SCREEN_H)
-        self.radius = self.get_radius(SCREEN_W // 2, SCREEN_H)
+    def create_launcher(self):
+        self.launcher = Point(HALF_SCREEN_W, SCREEN_H)
+        self.launcher_angle = 90
+        self.radius = self.get_radius(HALF_SCREEN_W, SCREEN_H)
         self.limit_angle = round_up(
-            self.calculate_angle(SCREEN_H, SCREEN_W // 2))
+            self.calculate_angle(SCREEN_H, HALF_SCREEN_W))
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
@@ -170,12 +169,12 @@ class Shooter:
              to_left (bool): True if bounce from right to left, False if left to right.
         """
         if not is_stop and to_left:
-            if (x := SCREEN.width - self.calculate_height(angle, start.y)) >= 0:
+            if (x := SCREEN_W - self.calculate_height(angle, start.y)) >= 0:
                 is_stop, line = self._simulate_course(start, Point(x, 0), True)
                 if line:
                     yield line
             else:
-                bottom = self.calculate_bottom(angle, SCREEN.width)
+                bottom = self.calculate_bottom(angle, SCREEN_W)
                 left_pt = Point(0, start.y - bottom)
                 is_stop, line = self._simulate_course(start, left_pt)
                 if line:
@@ -184,13 +183,13 @@ class Shooter:
                     yield from self._simulate_bounce_course(angle, left_pt, is_stop, False)
 
         if not is_stop and not to_left:
-            if (x := self.calculate_height(angle, start.y)) <= SCREEN.width:
+            if (x := self.calculate_height(angle, start.y)) <= SCREEN_W:
                 is_stop, line = self._simulate_course(start, Point(x, 0), True)
                 if line:
                     yield line
             else:
-                bottom = self.calculate_bottom(angle, SCREEN.width)
-                right_pt = Point(SCREEN.width, start.y - bottom)
+                bottom = self.calculate_bottom(angle, SCREEN_W)
+                right_pt = Point(SCREEN_W, start.y - bottom)
                 is_stop, line = self._simulate_course(start, right_pt)
                 if line:
                     yield line
@@ -212,26 +211,24 @@ class Shooter:
             if cross_point := self.find_cross_point(start, end, self.dest):
                 return True, Line(start, cross_point)
             return True, Line(start, self.dest.center)
-            # cross_point = self.find_cross_point(start, end, self.dest)
-            # return True, Line(start, cross_point)
         elif self.dest and not self.target:
             return False, Line(start, end)
         return True, None
 
     def update(self):
         if 0 < self.launcher_angle <= self.limit_angle:
-            y = SCREEN.height - self.calculate_height(self.launcher_angle, SCREEN.width // 2)
-            pt = Point(SCREEN.width, y)
+            y = SCREEN_H - self.calculate_height(self.launcher_angle, HALF_SCREEN_W)
+            pt = Point(SCREEN_W, y)
             self.course = [line for line in self.simulate_shoot_right(self.launcher, pt)]
         elif self.launcher_angle >= 180 - self.limit_angle:
-            y = SCREEN.height - self.calculate_height(180 - self.launcher_angle, SCREEN.width // 2)
+            y = SCREEN_H - self.calculate_height(180 - self.launcher_angle, HALF_SCREEN_W)
             pt = Point(0, y)
             self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
         else:
             if self.limit_angle < self.launcher_angle <= 90:
-                x = SCREEN.width // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN.height)
+                x = SCREEN_W // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN_H)
             elif 90 < self.launcher_angle < 180 - self.limit_angle:
-                x = SCREEN.width // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN.height)
+                x = SCREEN_W // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN_H)
             self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
 
         if self.dest:
@@ -285,99 +282,94 @@ class Shooter:
         return False
 
     def _trace(self, pt1, pt2):
-        """Yield cells on which the simulation line will pass,
-           from bottom to top.
+        """Yield cells on the simulation line from bottom to top.
            Args:
              pt1 (Point): one end of a simulation line
              pt2 (Point): the another end of a simulation line
         """
+        is_stop = False
         for cells in self.cells[::-1]:
             for cell in cells:
                 if self.is_crossing(pt1, pt2, cell):
                     yield cell
                     if cell.bubble:
-                        return
+                        is_stop = True
+                    break
+            if is_stop:
+                break
 
-    def _find_destination(self, target, candidates):
-        if len(neighbors := [cell for cell in self.scan(target.row, target.col)]) > 2:
-            for cell in candidates:
-                if cell in neighbors:
-                    return cell
-            return neighbors[0]
+    def _find_destination(self, target, dest):
+        """Return Cell having no bubble, around the target.
+           Arges:
+             target (Cell): having bubble a bullet will collide with
+             dest (Cell):  into which a bullet will go enter
+        """
+        if neighbors := [cell for cell in self.scan_bubbles(target.row, target.col) if not cell.bubble]:
+            candidate = min(
+                neighbors,
+                key=lambda x: self.calculate_distance(x.center, dest.center))
+            return candidate
         return None
 
     def find_destination(self, pt1, pt2):
-        """Return a destination cell into which a bullet go, and
-           a target cell with which the bullet will collid.
+        """Return a destination Cell into which a bullet go, and
+           a target Cell with which the bullet will collid.
            Args:
              pt1 (Point): one end of a simulation line
              pt2 (Point): the another end of a simulation line
         """
         if traced := [cell for cell in self._trace(pt1, pt2)]:
+            # print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
                 return None, None
             elif not any(cell.bubble for cell in traced):
                 return traced[-1], None
             else:
                 dest, target = traced[-2:]
-                if target.row > 0:
-                    if candidate := self._find_destination(target, traced[:-1]):
-                        dest = candidate
+                if not any(cell for cell in self.scan_bubbles(dest.row, dest.col) if cell.bubble):
+                    dest = self._find_destination(target, dest)
                 return dest, target
         return None, None
 
-    def scan(self, row, col):
+    def scan_bubbles(self, row, col):
         if row == 0:
             if row + 1 < ROWS and col - 1 >= 0:
-                if not (cell := self.cells[row + 1][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col - 1]
             if row + 1 < ROWS:
-                if not (cell := self.cells[row + 1][col]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col]
             if col - 1 >= 0:
-                if not (cell := self.cells[row][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row][col - 1]
             if col + 1 < COLS:
-                if not (cell := self.cells[row][col + 1]).bubble:
-                    yield cell
-        elif row % 2 == 0:
+                yield self.cells[row][col + 1]
+        if row % 2 == 0:
             if row + 1 < ROWS and col - 1 >= 0:
-                if not (cell := self.cells[row + 1][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col - 1]
             if row + 1 < ROWS:
-                if not (cell := self.cells[row + 1][col]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col]
             if col - 1 >= 0:
-                if not (cell := self.cells[row][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row][col - 1]
             if col + 1 < COLS:
-                if not (cell := self.cells[row][col + 1]).bubble:
-                    yield cell
+                yield self.cells[row][col + 1]
             if row - 1 >= 0 and col - 1 >= 0:
-                if not (cell := self.cells[row - 1][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row - 1][col - 1]
             if row - 1 >= 0:
-                if not (cell := self.cells[row - 1][col]).bubble:
-                    yield cell
+                yield self.cells[row - 1][col]
         else:
             if row + 1 < ROWS and col + 1 < COLS:
-                if not (cell := self.cells[row + 1][col + 1]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col + 1]
             if row + 1 < ROWS:
-                if not (cell := self.cells[row + 1][col]).bubble:
-                    yield cell
+                yield self.cells[row + 1][col]
             if col + 1 < COLS:
-                if not (cell := self.cells[row][col + 1]).bubble:
-                    yield cell
+                yield self.cells[row][col + 1]
             if col - 1 >= 0:
-                if not (cell := self.cells[row][col - 1]).bubble:
-                    yield cell
+                yield self.cells[row][col - 1]
             if row - 1 >= 0 and col + 1 < COLS:
-                if not (cell := self.cells[row - 1][col + 1]).bubble:
-                    yield cell
+                yield self.cells[row - 1][col + 1]
             if row - 1 >= 0:
-                if not (cell := self.cells[row - 1][col]).bubble:
-                    yield cell
+                yield self.cells[row - 1][col]
+
+    def calculate_distance(self, pt1, pt2):
+        return ((pt2.x - pt1.x) ** 2 + (pt2.y - pt1.x) ** 2) ** 0.5
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
@@ -423,7 +415,7 @@ class BaseBubble(pygame.sprite.Sprite):
         self.status = Status.STAY
 
     def move(self):
-        self.speed_x = randint(-10, 10)
+        self.speed_x = randint(-5, 5)
         self.speed_y = 5
 
     def update(self):
@@ -532,86 +524,38 @@ class Bullet(BaseBubble):
             cell.bubble.status = Status.MOVE
             cell.bubble = None
 
+    def _get_same_color(self, cell, cells):
+        for cell in self.shooter.scan_bubbles(cell.row, cell.col):
+            if cell.bubble and cell.bubble.color == self.color:
+                if cell not in cells:
+                    cells.add(cell)
+                    self._get_same_color(cell, cells)
+
     def drop_same_color_bubbles(self):
+        """Get bubbles that are the same color with a bullet to drop them.
+        """
         cells = set()
-        self.scan_bubbles(self.shooter.dest, cells, True)
+        self._get_same_color(self.shooter.dest, cells)
         if len(cells) >= 3:
             self.drop_bubbles(cells)
 
+    def _get_floating(self, cell, cells):
+        for cell in self.shooter.scan_bubbles(cell.row, cell.col):
+            if cell.bubble:
+                if cell not in cells:
+                    cells.add(cell)
+                    self._get_floating(cell, cells)
+
     def drop_floating_bubbles(self):
+        """Get bubbles that are connected to the top to drop them.
+        """
         if top := [cell for cell in self.shooter.cells[0] if cell.bubble]:
             connected = set(top)
             for cell in top:
-                self.scan_bubbles(cell, connected, False)
+                self._get_floating(cell, connected)
             bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
             diff = bubbles - connected
             self.drop_bubbles(diff)
-
-    def scan_bubbles(self, cell, cells, check_color):
-        for cell in self.scan(cell.row, cell.col, check_color):
-            if cell not in cells:
-                cells.add(cell)
-                self.scan_bubbles(cell, cells, check_color)
-
-    def _scan(self, row, col, check_color):
-        cell = self.shooter.cells[row][col]
-        if cell.bubble:
-            if cell.bubble.color == self.color or not check_color:
-                return cell
-        return None
-
-    def scan(self, row, col, check_color):
-        if row == 0:
-            if row + 1 < ROWS and col - 1 >= 0:
-                if cell := self._scan(row + 1, col - 1, check_color):
-                    yield cell
-            if row + 1 < ROWS:
-                if cell := self._scan(row + 1, col, check_color):
-                    yield cell
-            if col - 1 >= 0:
-                if cell := self._scan(row, col - 1, check_color):
-                    yield cell
-            if col + 1 < COLS:
-                if cell := self._scan(row, col + 1, check_color):
-                    yield cell
-        elif row % 2 == 0:
-            if row + 1 < ROWS and col - 1 >= 0:
-                if cell := self._scan(row + 1, col - 1, check_color):
-                    yield cell
-            if row + 1 < ROWS:
-                if cell := self._scan(row + 1, col, check_color):
-                    yield cell
-            if col - 1 >= 0:
-                if cell := self._scan(row, col - 1, check_color):
-                    yield cell
-            if col + 1 < COLS:
-                if cell := self._scan(row, col + 1, check_color):
-                    yield cell
-            if row - 1 >= 0 and col - 1 >= 0:
-                if cell := self._scan(row - 1, col - 1, check_color):
-                    yield cell
-            if row - 1 >= 0:
-                if cell := self._scan(row - 1, col, check_color):
-                    yield cell
-        else:
-            if row + 1 < ROWS and col + 1 < COLS:
-                if cell := self._scan(row + 1, col + 1, check_color):
-                    yield cell
-            if row + 1 < ROWS:
-                if cell := self._scan(row + 1, col, check_color):
-                    yield cell
-            if col + 1 < COLS:
-                if cell := self._scan(row, col + 1, check_color):
-                    yield cell
-            if col - 1 >= 0:
-                if cell := self._scan(row, col - 1, check_color):
-                    yield cell
-            if row - 1 >= 0 and col + 1 < COLS:
-                if cell := self._scan(row - 1, col + 1, check_color):
-                    yield cell
-            if row - 1 >= 0:
-                if cell := self._scan(row - 1, col, check_color):
-                    yield cell
 
 
 def main():
@@ -620,7 +564,6 @@ def main():
     pygame.display.set_caption('PyBubbleShooter')
     bubbles = pygame.sprite.RenderUpdates()
     bullets = pygame.sprite.RenderUpdates()
-
     Bubble.containers = bubbles
     Bullet.containers = bullets
     bubble_shooter = Shooter(screen)
