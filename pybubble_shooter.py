@@ -226,9 +226,9 @@ class Shooter:
             self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
         else:
             if self.limit_angle < self.launcher_angle <= 90:
-                x = SCREEN_W // 2 + self.calculate_height(90 - self.launcher_angle, SCREEN_H)
+                x = HALF_SCREEN_W + self.calculate_height(90 - self.launcher_angle, SCREEN_H)
             elif 90 < self.launcher_angle < 180 - self.limit_angle:
-                x = SCREEN_W // 2 - self.calculate_height(self.launcher_angle - 90, SCREEN_H)
+                x = HALF_SCREEN_W - self.calculate_height(self.launcher_angle - 90, SCREEN_H)
             self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
 
         if self.dest:
