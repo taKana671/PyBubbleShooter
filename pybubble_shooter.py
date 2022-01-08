@@ -8,9 +8,12 @@ from random import randint
 
 
 # screen
-SCREEN = Rect(0, 0, 526, 600)
-SCREEN_H = SCREEN.height
-SCREEN_W = SCREEN.width
+SCREEN = Rect(0, 0, 526, 650)
+SCREEN_H = 600
+SCREEN_W = 526
+# SCREEN = Rect(0, 0, 526, 600)
+# SCREEN_H = SCREEN.height
+# SCREEN_W = SCREEN.width
 HALF_SCREEN_W = SCREEN.width // 2
 
 Y_START_POS = 15
@@ -24,6 +27,7 @@ BUBBLE_SIZE = 30
 # color
 COLOR_GREEN = (0, 100, 0)
 DARK_GREEN = (0, 80, 0)
+RIGHT_GRAY = (178, 178, 178)
 
 
 BubbleKit = namedtuple('BubbleKit', 'file color')
@@ -95,11 +99,13 @@ class Shooter:
 
     def __init__(self, screen):
         self.screen = screen
+        self.sysfont = pygame.font.SysFont(None, 30)
         self.reflection_angle = None
         self.dest = None
         self.target = None
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_launcher()
+        self.create_rects()
         self.create_bubbles(10)
         self.status = Status.READY
 
@@ -115,9 +121,15 @@ class Shooter:
             for col, cell in enumerate(self.cells[row]):
                 i = randint(0, 5)
                 kit = BUBBLES[i]
-                bubble = Bubble(kit.file, kit.color, cell.center)
+                bubble = Bubble(kit.file, kit.color, cell.center, self.bars)
                 cell.bubble = bubble
         self.charge()
+
+    def create_rects(self):
+        self.bars = []
+        for i in range(6):
+            if i > 0:
+                self.bars.append(Rect(105 * i, 565, 5, 30))
 
     def simulate_shoot_right(self, start, end):
         """Yield lines on which a bullet shot to the right first will move.
@@ -215,7 +227,21 @@ class Shooter:
             return False, Line(start, end)
         return True, None
 
+    def draw_setting(self):
+        pygame.draw.rect(self.screen, DARK_GREEN, (0, 600, SCREEN_W, 50))
+        pygame.draw.circle(
+            self.screen, DARK_GREEN, self.launcher, 20)
+
+        for bar in self.bars:
+            pygame.draw.rect(self.screen, DARK_GREEN, bar)
+
+        for num, place in zip(['50', '100', '250', '100', '50'], [51, 140, 250, 350, 460]):
+            text = self.sysfont.render(num, True, RIGHT_GRAY)
+            self.screen.blit(text, (place, 540))
+
     def update(self):
+        self.draw_setting()
+
         if 0 < self.launcher_angle <= self.limit_angle:
             y = SCREEN_H - self.calculate_height(self.launcher_angle, HALF_SCREEN_W)
             pt = Point(SCREEN_W, y)
@@ -233,7 +259,6 @@ class Shooter:
 
         if self.dest:
             for line in self.course:
-                # print(line.start, line.end)
                 pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
 
         if self.status == Status.CHARGE:
@@ -402,7 +427,7 @@ class Shooter:
 
 class BaseBubble(pygame.sprite.Sprite):
 
-    def __init__(self, file, color, center):
+    def __init__(self, file, color, center, bars):
         super().__init__(self.containers)
         self.image = pygame.image.load(file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
@@ -413,6 +438,7 @@ class BaseBubble(pygame.sprite.Sprite):
         self.speed_y = 0
         self.color = color
         self.status = Status.STAY
+        self.bars = bars
 
     def move(self):
         self.speed_x = randint(-5, 5)
@@ -434,20 +460,23 @@ class BaseBubble(pygame.sprite.Sprite):
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
 
-            if self.rect.top > SCREEN.bottom:
+            if bars := self.rect.collidelist(self.bars):
+                print(bars)
+
+            if self.rect.bottom > SCREEN_H:
                 self.kill()
 
 
 class Bubble(BaseBubble):
 
-    def __init__(self, file, color, center):
-        super().__init__(file, color, center)
+    def __init__(self, file, color, center, bars):
+        super().__init__(file, color, center, bars)
 
 
 class Bullet(BaseBubble):
 
     def __init__(self, file, color, center, shooter):
-        super().__init__(file, color, center)
+        super().__init__(file, color, center, shooter.bars)
         self.shooter = shooter
         self.idx = 0
 
