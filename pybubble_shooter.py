@@ -308,18 +308,19 @@ class Shooter:
                 return True
         return False
 
-    def _trace(self, pt1, pt2):
+    def _trace(self, start, end):
         """Yield cells on the simulation line from bottom to top.
            Args:
-             pt1 (Point): one end of a simulation line
-             pt2 (Point): the another end of a simulation line
+             start (Point): one end of a simulation line
+             end (Point): the another end of a simulation line
         """
         # is_stop = False
         target = None
         for cells in self.cells[::-1]:
             passing_point = None
-            for cell in cells:
-                if self.is_crossing(pt1, pt2, cell):
+            for cell in cells if start.x >= end.x else cells[::-1]:
+            # for cell in cells:
+                if self.is_crossing(start, end, cell):
                     if not cell.bubble and not passing_point:
                         passing_point = cell
                     if cell.bubble:
@@ -342,27 +343,65 @@ class Shooter:
         #     if is_stop:
         #         break
 
-    def _find_destination(self, target, dest):
+   
+    def _scan(self, target):
+        for cell in self.scan_bubbles(target.row, target.col):
+            if not cell.bubble:
+                yield cell
+            else:
+                for candidate in self.scan_bubbles(cell.row, cell.col):
+                    if not cell.bubble:
+                        yield candidate
+
+    def _find_destination(self, target, dest, to_left):
         """Return Cell having no bubble, around the target.
            Arges:
              target (Cell): having bubble a bullet will collide with
              dest (Cell):  into which a bullet will go enter
         """
-        if neighbors := [cell for cell in self.scan_bubbles(target.row, target.col) if not cell.bubble]:
-            candidate = min(
-                neighbors,
-                key=lambda x: self.calculate_distance(x.center, dest.center))
-            return candidate
+        print('correct')
+        if to_left:
+            if cancidates := set(cell for cell in self._scan(target) if target.center.x <= cell.center.x):
+                candidate = min(
+                    cancidates,
+                    key=lambda x: self.calculate_distance(x.center, dest.center))
+                return candidate
+        else:
+            if cancidates := set(cell for cell in self._scan(target) if target.center.x > cell.center.x):
+                candidate = min(
+                    cancidates,
+                    key=lambda x: self.calculate_distance(x.center, dest.center))
+                return candidate
+
         return None
 
-    def find_destination(self, pt1, pt2):
+
+
+        # if cancidates := [cell for cell in self._scan(target)]:
+        #     candidate = min(
+        #         cancidates,
+        #         key=lambda x: self.calculate_distance(x.center, dest.center))
+        #     return candidate
+        # return None
+
+
+        # if neighbors := [cell for cell in self.scan_bubbles(target.row, target.col) if not cell.bubble]:
+        #     candidate = min(
+        #         neighbors,
+        #         key=lambda x: self.calculate_distance(x.center, dest.center))
+        #     return candidate
+        # return None
+
+    def find_destination(self, start, end):
         """Return a destination Cell into which a bullet go, and
            a target Cell with which the bullet will collid.
            Args:
-             pt1 (Point): one end of a simulation line
-             pt2 (Point): the another end of a simulation line
+             start (Point): one end of a simulation line
+             end (Point): the another end of a simulation line
         """
-        if traced := [cell for cell in self._trace(pt1, pt2)]:
+
+        # print('pt1', start, 'pt2', end)
+        if traced := [cell for cell in self._trace(start, end)]:
             print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
                 return None, None
@@ -371,7 +410,7 @@ class Shooter:
             else:
                 dest, target = traced[-2:]
                 if not any(cell for cell in self.scan_bubbles(dest.row, dest.col) if cell.bubble):
-                    dest = self._find_destination(target, dest)
+                    dest = self._find_destination(target, dest, start.x >= end.x)
                 return dest, target
         return None, None
 
