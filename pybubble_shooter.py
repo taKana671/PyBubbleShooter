@@ -97,8 +97,9 @@ class Cell:
 
 class Shooter:
 
-    def __init__(self, screen):
+    def __init__(self, screen, score):
         self.screen = screen
+        self.score = score
         self.sysfont = pygame.font.SysFont(None, 30)
         self.reflection_angle = None
         self.dest = None
@@ -121,15 +122,16 @@ class Shooter:
             for col, cell in enumerate(self.cells[row]):
                 i = randint(0, 5)
                 kit = BUBBLES[i]
-                bubble = Bubble(kit.file, kit.color, cell.center, self.bars)
+                bubble = Bubble(kit.file, kit.color, cell.center, self)
                 cell.bubble = bubble
         self.charge()
 
     def create_rects(self):
         self.bars = []
-        for i in range(6):
+        for i in range(5):
             if i > 0:
-                self.bars.append(Rect(105 * i, 565, 5, 30))
+                # 105, 210, 315, 420, 525
+                self.bars.append(Rect(105 * i, 540, 5, 55))
 
     def simulate_shoot_right(self, start, end):
         """Yield lines on which a bullet shot to the right first will move.
@@ -235,7 +237,7 @@ class Shooter:
         for bar in self.bars:
             pygame.draw.rect(self.screen, DARK_GREEN, bar)
 
-        for num, place in zip(['50', '100', '250', '100', '50'], [51, 140, 250, 350, 460]):
+        for num, place in zip(['50', '100', '250', '100', '50'], [49, 140, 250, 350, 460]):
             text = self.sysfont.render(num, True, RIGHT_GRAY)
             self.screen.blit(text, (place, 540))
 
@@ -312,16 +314,33 @@ class Shooter:
              pt1 (Point): one end of a simulation line
              pt2 (Point): the another end of a simulation line
         """
-        is_stop = False
+        # is_stop = False
+        target = None
         for cells in self.cells[::-1]:
+            passing_point = None
             for cell in cells:
                 if self.is_crossing(pt1, pt2, cell):
-                    yield cell
+                    if not cell.bubble and not passing_point:
+                        passing_point = cell
                     if cell.bubble:
-                        is_stop = True
-                    break
-            if is_stop:
+                        target = cell
+                        break
+            if not target and passing_point:
+                yield passing_point
+            elif target:
+                yield target
                 break
+
+        # is_stop = False
+        # for cells in self.cells[::-1]:
+        #     for cell in cells:
+        #         if self.is_crossing(pt1, pt2, cell):
+        #             yield cell
+        #             if cell.bubble:
+        #                 is_stop = True
+        #             break
+        #     if is_stop:
+        #         break
 
     def _find_destination(self, target, dest):
         """Return Cell having no bubble, around the target.
@@ -344,7 +363,7 @@ class Shooter:
              pt2 (Point): the another end of a simulation line
         """
         if traced := [cell for cell in self._trace(pt1, pt2)]:
-            # print([(c.row, c.col) for c in traced])
+            print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
                 return None, None
             elif not any(cell.bubble for cell in traced):
@@ -425,9 +444,33 @@ class Shooter:
             self.bullet.shoot()
 
 
+class Score:
+
+    def __init__(self, screen):
+        self.sysfont = pygame.font.SysFont(None, 30)
+        self.screen = screen
+        self.score = 0
+
+    def add(self, x):
+        if x < 105:
+            self.score += 50
+        elif 110 < x < 210:
+            self.score += 100
+        elif 215 < x < 315:
+            self.score += 250
+        elif 320 < x < 420:
+            self.score += 100
+        elif x > 425:
+            self.score += 50
+
+    def update(self):
+        text = self.sysfont.render(str(self.score), True, RIGHT_GRAY)
+        self.screen.blit(text, (10, 615))
+
+
 class BaseBubble(pygame.sprite.Sprite):
 
-    def __init__(self, file, color, center, bars):
+    def __init__(self, file, color, center, shooter):
         super().__init__(self.containers)
         self.image = pygame.image.load(file).convert_alpha()
         self.image = pygame.transform.scale(self.image, (BUBBLE_SIZE, BUBBLE_SIZE))
@@ -438,11 +481,11 @@ class BaseBubble(pygame.sprite.Sprite):
         self.speed_y = 0
         self.color = color
         self.status = Status.STAY
-        self.bars = bars
+        self.shooter = shooter
 
     def move(self):
-        self.speed_x = randint(-5, 5)
-        self.speed_y = 5
+        self.speed_x = randint(-10, 10)
+        self.speed_y = 2
 
     def update(self):
         if self.status == Status.MOVE:
@@ -460,24 +503,32 @@ class BaseBubble(pygame.sprite.Sprite):
                 self.rect.top = SCREEN.top
                 self.speed_y = -self.speed_y
 
-            if bars := self.rect.collidelist(self.bars):
-                print(bars)
+            if (idx := self.rect.collidelist(self.shooter.bars)) > -1:
+                bar = self.shooter.bars[idx]
+                if self.rect.left <= bar.right < self.rect.right:
+                    self.rect.left = bar.right
+                    self.speed_x = -self.speed_x
+                if self.rect.right >= bar.left > self.rect.left:
+                    self.rect.right = bar.left
+                    self.speed_x = -self.speed_x
+                if bar.left > self.rect.left and bar.right < self.rect.right:
+                    self.rect.bottom = bar.top + 10
 
             if self.rect.bottom > SCREEN_H:
+                self.shooter.score.add(self.rect.centerx)
                 self.kill()
 
 
 class Bubble(BaseBubble):
 
-    def __init__(self, file, color, center, bars):
-        super().__init__(file, color, center, bars)
+    def __init__(self, file, color, center, shooter):
+        super().__init__(file, color, center, shooter)
 
 
 class Bullet(BaseBubble):
 
     def __init__(self, file, color, center, shooter):
-        super().__init__(file, color, center, shooter.bars)
-        self.shooter = shooter
+        super().__init__(file, color, center, shooter)
         self.idx = 0
 
     def decide_positions(self, start, end):
@@ -509,6 +560,10 @@ class Bullet(BaseBubble):
             return lambda x, y: True if end.x > x else False
 
     def simulate_course(self):
+        """Calculate points which a bullet pass through.The last point in the Shooter.course
+           is the cross-point with one of the sides of a Cell. So replace it to the center
+           point of the Cell.
+        """
         last = self.shooter.course[-1]
         bullet_course = self.shooter.course[:-1] + [Line(last.start, self.shooter.dest.center)]
 
@@ -595,9 +650,11 @@ def main():
     bullets = pygame.sprite.RenderUpdates()
     Bubble.containers = bubbles
     Bullet.containers = bullets
-    bubble_shooter = Shooter(screen)
+
+    score = Score(screen)
+    bubble_shooter = Shooter(screen, score)
     clock = pygame.time.Clock()
-    pygame.key.set_repeat(500, 100)
+    pygame.key.set_repeat(100, 100)
 
     while True:
         clock.tick(60)
@@ -608,6 +665,7 @@ def main():
         bubbles.draw(screen)
         bullets.update()
         bullets.draw(screen)
+        score.update()
 
         for event in pygame.event.get():
             if event.type == QUIT:
