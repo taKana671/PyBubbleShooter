@@ -12,6 +12,14 @@ COLOR_GREEN = (0, 100, 0)
 DARK_GREEN = (0, 80, 0)
 RIGHT_GRAY = (178, 178, 178)
 
+YELLOW_GREEN = (153, 255, 102)
+BLUE = (0, 102, 255)
+PINK = (255, 102, 255)
+PURPLE = (204, 0, 255)
+RED = (255, 0, 0)
+RIGHT_BLUE = (0, 255, 255)
+DEEP_GREEN = (0, 51, 0)
+
 # bubbles
 Y_START_POS = 15
 X_START_POS = 16
@@ -28,15 +36,15 @@ Window = namedtuple('Window', 'width height top bottom left right half_width')
 WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
 
 
-BubbleKit = namedtuple('BubbleKit', 'file color')
+BubbleKit = namedtuple('BubbleKit', 'file color color_code')
 
 BUBBLES = [
-    BubbleKit('images/ball_blue.png', 'blue'),
-    BubbleKit('images/ball_green.png', 'green'),
-    BubbleKit('images/ball_pink.png', 'pink'),
-    BubbleKit('images/ball_purple.png', 'purple'),
-    BubbleKit('images/ball_red.png', 'red'),
-    BubbleKit('images/ball_sky.png', 'sky'),
+    BubbleKit('images/ball_blue.png', 'blue', BLUE),
+    BubbleKit('images/ball_green.png', 'green', YELLOW_GREEN),
+    BubbleKit('images/ball_pink.png', 'pink', PINK),
+    BubbleKit('images/ball_purple.png', 'purple', PURPLE),
+    BubbleKit('images/ball_red.png', 'red', RED),
+    BubbleKit('images/ball_sky.png', 'sky', RIGHT_BLUE),
 ]
 
 
@@ -114,6 +122,9 @@ class Shooter:
         self.radius = self.get_radius(WINDOW.half_width, WINDOW.height)
         self.limit_angle = round_up(
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
+        self.bullet_holder = Point(WINDOW.half_width, 635)
+        self.next_bullet = self.get_bullet()
+        self.charge()
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
@@ -122,7 +133,6 @@ class Shooter:
                 kit = BUBBLES[i]
                 bubble = Bubble(kit.file, kit.color, cell.center, self)
                 cell.bubble = bubble
-        self.charge()
 
     def create_rects(self):
         self.bars = []
@@ -232,6 +242,8 @@ class Shooter:
         pygame.draw.circle(
             self.screen, DARK_GREEN, self.launcher, 20)
 
+        pygame.draw.circle(self.screen, self.next_bullet.color_code, self.bullet_holder, 4)
+
         for bar in self.bars:
             pygame.draw.rect(self.screen, DARK_GREEN, bar)
 
@@ -265,10 +277,14 @@ class Shooter:
             self.charge()
             self.status = Status.READY
 
-    def charge(self):
+    def get_bullet(self):
         i = randint(0, 5)
-        kit = BUBBLES[i]
-        self.bullet = Bullet(kit.file, kit.color, self.launcher, self)
+        return BUBBLES[i]
+
+    def charge(self):
+        bullet = self.next_bullet
+        self.next_bullet = self.get_bullet()
+        self.bullet = Bullet(bullet.file, bullet.color, self.launcher, self)
 
     def _find_cross_point(self, pt1, pt2, pt3, pt4):
         a0 = pt2.x - pt1.x
@@ -345,8 +361,6 @@ class Shooter:
              target (Cell): having bubble a bullet will collide with
              dest (Cell):  into which a bullet will go enter
         """
-        print('correct')
-
         if target.center.x <= dest.center.x:
             cancidates = set(cell for cell in self._scan(target) if target.center.x <= cell.center.x)
         else:
@@ -367,7 +381,7 @@ class Shooter:
              end (Point): the another end of a simulation line
         """
         if traced := [cell for cell in self._trace(start, end)]:
-            print([(c.row, c.col) for c in traced])
+            # print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
                 return None, None
             elif not any(cell.bubble for cell in traced):
