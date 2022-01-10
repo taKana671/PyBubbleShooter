@@ -317,9 +317,14 @@ class Shooter:
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
     def is_crossing(self, pt1, pt2, cell):
-        if sum(self._is_crossing(pt1, pt2, line.start, line.end)
-                for line in (cell.bottom, cell.right, cell.left, cell.top)) == 2:
-            return True
+        if cell.row == 0:
+            if any(self._is_crossing(pt1, pt2, line.start, line.end)
+                    for line in (cell.bottom, cell.right, cell.left, cell.top)):
+                return True
+        else:
+            if sum(self._is_crossing(pt1, pt2, line.start, line.end)
+                    for line in (cell.bottom, cell.right, cell.left, cell.top)) == 2:
+                return True
         return False
 
     def _trace(self, start, end):
@@ -380,6 +385,7 @@ class Shooter:
              start (Point): one end of a simulation line
              end (Point): the another end of a simulation line
         """
+        # print('start', start, 'end', end)
         if traced := [cell for cell in self._trace(start, end)]:
             # print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
