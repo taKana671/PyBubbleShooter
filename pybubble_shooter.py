@@ -7,27 +7,25 @@ from pygame.locals import QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, KEYDOWN, MOUSEBUT
 from random import randint
 
 
-# screen
-SCREEN = Rect(0, 0, 526, 650)
-SCREEN_H = 600
-SCREEN_W = 526
-# SCREEN = Rect(0, 0, 526, 600)
-# SCREEN_H = SCREEN.height
-# SCREEN_W = SCREEN.width
-HALF_SCREEN_W = SCREEN.width // 2
-
-Y_START_POS = 15
-X_START_POS = 16
-
-ROWS = 20
-COLS = 17
-
-BUBBLE_SIZE = 30
-
 # color
 COLOR_GREEN = (0, 100, 0)
 DARK_GREEN = (0, 80, 0)
 RIGHT_GRAY = (178, 178, 178)
+
+# bubbles
+Y_START_POS = 15
+X_START_POS = 16
+ROWS = 20
+COLS = 17
+BUBBLE_SIZE = 30
+
+# screen
+SCREEN = Rect(0, 0, 526, 650)
+
+
+Window = namedtuple('Window', 'width height top bottom left right half_width')
+
+WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
 
 
 BubbleKit = namedtuple('BubbleKit', 'file color')
@@ -111,11 +109,11 @@ class Shooter:
         self.status = Status.READY
 
     def create_launcher(self):
-        self.launcher = Point(HALF_SCREEN_W, SCREEN_H)
+        self.launcher = Point(WINDOW.half_width, WINDOW.height)
         self.launcher_angle = 90
-        self.radius = self.get_radius(HALF_SCREEN_W, SCREEN_H)
+        self.radius = self.get_radius(WINDOW.half_width, WINDOW.height)
         self.limit_angle = round_up(
-            self.calculate_angle(SCREEN_H, HALF_SCREEN_W))
+            self.calculate_angle(WINDOW.height, WINDOW.half_width))
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
@@ -183,12 +181,12 @@ class Shooter:
              to_left (bool): True if bounce from right to left, False if left to right.
         """
         if not is_stop and to_left:
-            if (x := SCREEN_W - self.calculate_height(angle, start.y)) >= 0:
+            if (x := WINDOW.width - self.calculate_height(angle, start.y)) >= 0:
                 is_stop, line = self._simulate_course(start, Point(x, 0), True)
                 if line:
                     yield line
             else:
-                bottom = self.calculate_bottom(angle, SCREEN_W)
+                bottom = self.calculate_bottom(angle, WINDOW.width)
                 left_pt = Point(0, start.y - bottom)
                 is_stop, line = self._simulate_course(start, left_pt)
                 if line:
@@ -197,13 +195,13 @@ class Shooter:
                     yield from self._simulate_bounce_course(angle, left_pt, is_stop, False)
 
         if not is_stop and not to_left:
-            if (x := self.calculate_height(angle, start.y)) <= SCREEN_W:
+            if (x := self.calculate_height(angle, start.y)) <= WINDOW.width:
                 is_stop, line = self._simulate_course(start, Point(x, 0), True)
                 if line:
                     yield line
             else:
-                bottom = self.calculate_bottom(angle, SCREEN_W)
-                right_pt = Point(SCREEN_W, start.y - bottom)
+                bottom = self.calculate_bottom(angle, WINDOW.width)
+                right_pt = Point(WINDOW.width, start.y - bottom)
                 is_stop, line = self._simulate_course(start, right_pt)
                 if line:
                     yield line
@@ -230,7 +228,7 @@ class Shooter:
         return True, None
 
     def draw_setting(self):
-        pygame.draw.rect(self.screen, DARK_GREEN, (0, 600, SCREEN_W, 50))
+        pygame.draw.rect(self.screen, DARK_GREEN, (0, 600, WINDOW.width, 50))
         pygame.draw.circle(
             self.screen, DARK_GREEN, self.launcher, 20)
 
@@ -245,18 +243,18 @@ class Shooter:
         self.draw_setting()
 
         if 0 < self.launcher_angle <= self.limit_angle:
-            y = SCREEN_H - self.calculate_height(self.launcher_angle, HALF_SCREEN_W)
-            pt = Point(SCREEN_W, y)
+            y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
+            pt = Point(WINDOW.width, y)
             self.course = [line for line in self.simulate_shoot_right(self.launcher, pt)]
         elif self.launcher_angle >= 180 - self.limit_angle:
-            y = SCREEN_H - self.calculate_height(180 - self.launcher_angle, HALF_SCREEN_W)
+            y = WINDOW.height - self.calculate_height(180 - self.launcher_angle, WINDOW.half_width)
             pt = Point(0, y)
             self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
         else:
             if self.limit_angle < self.launcher_angle <= 90:
-                x = HALF_SCREEN_W + self.calculate_height(90 - self.launcher_angle, SCREEN_H)
+                x = WINDOW.half_width + self.calculate_height(90 - self.launcher_angle, WINDOW.height)
             elif 90 < self.launcher_angle < 180 - self.limit_angle:
-                x = HALF_SCREEN_W - self.calculate_height(self.launcher_angle - 90, SCREEN_H)
+                x = WINDOW.half_width - self.calculate_height(self.launcher_angle - 90, WINDOW.height)
             self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
 
         if self.dest:
@@ -303,47 +301,35 @@ class Shooter:
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
     def is_crossing(self, pt1, pt2, cell):
-        for line in (cell.bottom, cell.right, cell.left, cell.top):
-            if self._is_crossing(pt1, pt2, line.start, line.end):
-                return True
+        if sum(self._is_crossing(pt1, pt2, line.start, line.end)
+                for line in (cell.bottom, cell.right, cell.left, cell.top)) == 2:
+            return True
         return False
 
     def _trace(self, start, end):
-        """Yield cells on the simulation line from bottom to top.
+        """Follow a simulation line from bottom to top, and yield
+           Cell that intersects the simulation line.
            Args:
              start (Point): one end of a simulation line
              end (Point): the another end of a simulation line
         """
-        # is_stop = False
         target = None
+        step = 1 if start.x >= end.x else -1
         for cells in self.cells[::-1]:
-            passing_point = None
-            for cell in cells if start.x >= end.x else cells[::-1]:
-            # for cell in cells:
+            empty = None
+            for cell in cells[::step]:
                 if self.is_crossing(start, end, cell):
-                    if not cell.bubble and not passing_point:
-                        passing_point = cell
+                    if not cell.bubble and not empty:
+                        empty = cell
                     if cell.bubble:
                         target = cell
                         break
-            if not target and passing_point:
-                yield passing_point
+            if not target and empty:
+                yield empty
             elif target:
                 yield target
                 break
 
-        # is_stop = False
-        # for cells in self.cells[::-1]:
-        #     for cell in cells:
-        #         if self.is_crossing(pt1, pt2, cell):
-        #             yield cell
-        #             if cell.bubble:
-        #                 is_stop = True
-        #             break
-        #     if is_stop:
-        #         break
-
-   
     def _scan(self, target):
         for cell in self.scan_bubbles(target.row, target.col):
             if not cell.bubble:
@@ -353,44 +339,25 @@ class Shooter:
                     if not cell.bubble:
                         yield candidate
 
-    def _find_destination(self, target, dest, to_left):
+    def _find_destination(self, target, dest):
         """Return Cell having no bubble, around the target.
            Arges:
              target (Cell): having bubble a bullet will collide with
              dest (Cell):  into which a bullet will go enter
         """
         print('correct')
-        if to_left:
-            if cancidates := set(cell for cell in self._scan(target) if target.center.x <= cell.center.x):
-                candidate = min(
-                    cancidates,
-                    key=lambda x: self.calculate_distance(x.center, dest.center))
-                return candidate
+
+        if target.center.x <= dest.center.x:
+            cancidates = set(cell for cell in self._scan(target) if target.center.x <= cell.center.x)
         else:
-            if cancidates := set(cell for cell in self._scan(target) if target.center.x > cell.center.x):
-                candidate = min(
-                    cancidates,
-                    key=lambda x: self.calculate_distance(x.center, dest.center))
-                return candidate
+            cancidates = set(cell for cell in self._scan(target) if target.center.x > cell.center.x)
 
+        if cancidates:
+            candidate = min(
+                cancidates,
+                key=lambda x: self.calculate_distance(x.center, dest.center))
+            return candidate
         return None
-
-
-
-        # if cancidates := [cell for cell in self._scan(target)]:
-        #     candidate = min(
-        #         cancidates,
-        #         key=lambda x: self.calculate_distance(x.center, dest.center))
-        #     return candidate
-        # return None
-
-
-        # if neighbors := [cell for cell in self.scan_bubbles(target.row, target.col) if not cell.bubble]:
-        #     candidate = min(
-        #         neighbors,
-        #         key=lambda x: self.calculate_distance(x.center, dest.center))
-        #     return candidate
-        # return None
 
     def find_destination(self, start, end):
         """Return a destination Cell into which a bullet go, and
@@ -399,8 +366,6 @@ class Shooter:
              start (Point): one end of a simulation line
              end (Point): the another end of a simulation line
         """
-
-        # print('pt1', start, 'pt2', end)
         if traced := [cell for cell in self._trace(start, end)]:
             print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
@@ -410,7 +375,7 @@ class Shooter:
             else:
                 dest, target = traced[-2:]
                 if not any(cell for cell in self.scan_bubbles(dest.row, dest.col) if cell.bubble):
-                    dest = self._find_destination(target, dest, start.x >= end.x)
+                    dest = self._find_destination(target, dest)
                 return dest, target
         return None, None
 
@@ -530,16 +495,16 @@ class BaseBubble(pygame.sprite.Sprite):
         if self.status == Status.MOVE:
             self.rect.centerx += self.speed_x
             self.rect.centery += self.speed_y
-            if self.rect.left < SCREEN.left:
-                self.rect.left = SCREEN.left
+            if self.rect.left < WINDOW.left:
+                self.rect.left = WINDOW.left
                 self.speed_x = -self.speed_x
 
-            if self.rect.right > SCREEN.right:
-                self.rect.right = SCREEN.right
+            if self.rect.right > WINDOW.right:
+                self.rect.right = WINDOW.right
                 self.speed_x = -self.speed_x
 
-            if self.rect.top < SCREEN.top:
-                self.rect.top = SCREEN.top
+            if self.rect.top < WINDOW.top:
+                self.rect.top = WINDOW.top
                 self.speed_y = -self.speed_y
 
             if (idx := self.rect.collidelist(self.shooter.bars)) > -1:
@@ -553,7 +518,7 @@ class BaseBubble(pygame.sprite.Sprite):
                 if bar.left > self.rect.left and bar.right < self.rect.right:
                     self.rect.bottom = bar.top + 10
 
-            if self.rect.bottom > SCREEN_H:
+            if self.rect.bottom > WINDOW.height:
                 self.shooter.score.add(self.rect.centerx)
                 self.kill()
 
@@ -625,11 +590,11 @@ class Bullet(BaseBubble):
             self.rect.centerx = pt.x
             self.rect.centery = pt.y
 
-            if self.rect.left < SCREEN.left:
-                self.rect.left = SCREEN.left
+            if self.rect.left < WINDOW.left:
+                self.rect.left = WINDOW.left
 
-            if self.rect.right > SCREEN.right:
-                self.rect.right = SCREEN.right
+            if self.rect.right > WINDOW.right:
+                self.rect.right = WINDOW.right
 
             if self.idx + 1 < len(self.course):
                 self.idx += 1
