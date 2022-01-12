@@ -13,7 +13,7 @@ DARK_GREEN = (0, 80, 0)
 RIGHT_GRAY = (178, 178, 178)
 
 YELLOW_GREEN = (153, 255, 102)
-BLUE = (0, 102, 255)
+BLUE = (0, 0, 255)
 PINK = (255, 102, 255)
 PURPLE = (204, 0, 255)
 RED = (255, 0, 0)
@@ -50,7 +50,6 @@ BUBBLES = [
 
 class Status(Enum):
 
-    LAUNCHED = auto()
     READY = auto()
     STAY = auto()
     MOVE = auto()
@@ -103,11 +102,11 @@ class Cell:
 
 class Shooter:
 
-    def __init__(self, screen, score):
+    def __init__(self, screen, score, droppings):
         self.screen = screen
         self.score = score
+        self.droppings_group = droppings
         self.sysfont = pygame.font.SysFont(None, 30)
-        self.reflection_angle = None
         self.dest = None
         self.target = None
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
@@ -284,7 +283,7 @@ class Shooter:
     def charge(self):
         bullet = self.next_bullet
         self.next_bullet = self.get_bullet()
-        self.bullet = Bullet(bullet.file, bullet.color, self.launcher, self)
+        self.bullet = Bullet(bullet.file, bullet.color, self)
 
     def _find_cross_point(self, pt1, pt2, pt3, pt4):
         a0 = pt2.x - pt1.x
@@ -360,18 +359,21 @@ class Shooter:
                     if not cell.bubble:
                         yield candidate
 
+    def select_compare_function(self, target, dest):
+        if target.center.x <= dest.center.x:
+            return lambda target, cell: True if target.center.x <= cell.center.x else False
+        else:
+            return lambda target, cell: True if target.center.x > cell.center.x else False
+
     def _find_destination(self, target, dest):
         """Return Cell having no bubble, around the target.
            Arges:
-             target (Cell): having bubble a bullet will collide with
-             dest (Cell):  into which a bullet will go enter
+             target (Cell): cell having bubble a bullet will collide with
+             dest (Cell):  cell into which a bullet will go enter
         """
-        if target.center.x <= dest.center.x:
-            cancidates = set(cell for cell in self._scan(target) if target.center.x <= cell.center.x)
-        else:
-            cancidates = set(cell for cell in self._scan(target) if target.center.x > cell.center.x)
+        compare_x = self.select_compare_function(target, dest)
 
-        if cancidates:
+        if cancidates := set(cell for cell in self._scan(target) if compare_x(target, cell)):
             candidate = min(
                 cancidates,
                 key=lambda x: self.calculate_distance(x.center, dest.center))
@@ -385,9 +387,7 @@ class Shooter:
              start (Point): one end of a simulation line
              end (Point): the another end of a simulation line
         """
-        # print('start', start, 'end', end)
         if traced := [cell for cell in self._trace(start, end)]:
-            # print([(c.row, c.col) for c in traced])
             if len(traced) == 1:
                 return None, None
             elif not any(cell.bubble for cell in traced):
@@ -462,7 +462,6 @@ class Shooter:
             self.launcher_angle = 175
 
     def shoot(self):
-        # if self.bullet.status == Status.READY:
         if self.status == Status.READY and self.dest:
             self.status = Status.SHOT
             self.bullet.shoot()
@@ -551,11 +550,11 @@ class Bubble(BaseBubble):
 
 class Bullet(BaseBubble):
 
-    def __init__(self, file, color, center, shooter):
-        super().__init__(file, color, center, shooter)
+    def __init__(self, file, color, shooter):
+        super().__init__(file, color, shooter.launcher, shooter)
         self.idx = 0
 
-    def decide_positions(self, start, end):
+    def decide_positions(self, start, end, compare_position):
         dx = end.x - start.x
         dy = end.y - start.y
         distance = (dx**2 + dy ** 2) ** 0.5
@@ -564,24 +563,20 @@ class Bullet(BaseBubble):
         x = start.x + vx
         y = start.y + vy
 
-        if self.is_going(x, y):
+        if compare_position(end, x, y):
             pass_pt = Point(x, y)
             yield pass_pt
-            yield from self.decide_positions(pass_pt, end)
+            yield from self.decide_positions(pass_pt, end, compare_position)
         else:
             yield self.shooter.dest.center
 
-    def is_going(self, x, y):
-        """Override before calling decide_position method.
-        """
-
     def select_func(self, start, end):
         if start.x == end.x:
-            return lambda x, y: True if end.y < y else False
+            return lambda end, x, y: True if end.y < y else False
         elif start.x > end.x:
-            return lambda x, y: True if x > end.x else False
+            return lambda end, x, y: True if x > end.x else False
         else:
-            return lambda x, y: True if end.x > x else False
+            return lambda end, x, y: True if end.x > x else False
 
     def simulate_course(self):
         """Calculate points which a bullet pass through.The last point in the Shooter.course
@@ -592,20 +587,19 @@ class Bullet(BaseBubble):
         bullet_course = self.shooter.course[:-1] + [Line(last.start, self.shooter.dest.center)]
 
         for line in bullet_course:
-            func = self.select_func(line.start, line.end)
-            self.is_going = func
-            for pt in self.decide_positions(line.start, line.end):
+            compare_position = self.select_func(line.start, line.end)
+            for pt in self.decide_positions(line.start, line.end, compare_position):
                 yield pt
 
     def shoot(self):
         self.course = [pt for pt in self.simulate_course()]
-        self.status = Status.LAUNCHED
+        self.status = Status.SHOT
 
     def update(self):
         if self.status == Status.MOVE:
             super().update()
 
-        if self.status == Status.LAUNCHED:
+        if self.status == Status.SHOT:
             pt = self.course[self.idx]
             self.rect.centerx = pt.x
             self.rect.centery = pt.y
@@ -628,6 +622,7 @@ class Bullet(BaseBubble):
 
     def drop_bubbles(self, cells):
         for cell in cells:
+            self.shooter.droppings_group.add(cell.bubble)
             cell.bubble.move()
             cell.bubble.status = Status.MOVE
             cell.bubble = None
@@ -671,12 +666,13 @@ def main():
     screen = pygame.display.set_mode(SCREEN.size)
     pygame.display.set_caption('PyBubbleShooter')
     bubbles = pygame.sprite.RenderUpdates()
-    bullets = pygame.sprite.RenderUpdates()
+    droppings = pygame.sprite.RenderUpdates()
+
     Bubble.containers = bubbles
-    Bullet.containers = bullets
+    Bullet.containers = bubbles
 
     score = Score(screen)
-    bubble_shooter = Shooter(screen, score)
+    bubble_shooter = Shooter(screen, score, droppings)
     clock = pygame.time.Clock()
     pygame.key.set_repeat(100, 100)
 
@@ -687,14 +683,21 @@ def main():
         bubble_shooter.update()
         bubbles.update()
         bubbles.draw(screen)
-        bullets.update()
-        bullets.draw(screen)
+        droppings.draw(screen)
         score.update()
+
+        # x, y = pygame.mouse.get_rel()
+        # if x > 0:
+        #     bubble_shooter.move_right()
+        # if x < 0:
+        #     bubble_shooter.move_left()
 
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
+            # if event.type == MOUSEBUTTONDOWN and event.button == 1:
+            #     bubble_shooter.shoot()
             if event.type == KEYDOWN:
                 if event.key == K_RIGHT:
                     bubble_shooter.move_right()
