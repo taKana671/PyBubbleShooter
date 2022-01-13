@@ -1,10 +1,11 @@
 import math
 import pygame
+import random
 import sys
 from collections import namedtuple
 from enum import Enum, auto
-from pygame.locals import QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, KEYDOWN, MOUSEBUTTONDOWN, Rect
-from random import randint
+from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP,
+    KEYDOWN, MOUSEBUTTONDOWN, Rect)
 
 
 # color
@@ -71,6 +72,9 @@ def round(value):
 
 class Cell:
 
+    __slots__ = ['bubble', 'row', 'col', 'center',
+                 'left', 'right', 'top', 'bottom']
+
     def __init__(self, row, col):
         self.bubble = None
         self.row = row
@@ -112,7 +116,7 @@ class Shooter:
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_launcher()
         self.create_rects()
-        self.create_bubbles(10)
+        self.create_bubbles(12)
         self.status = Status.READY
 
     def create_launcher(self):
@@ -122,14 +126,13 @@ class Shooter:
         self.limit_angle = round_up(
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
         self.bullet_holder = Point(WINDOW.half_width, 635)
-        self.next_bullet = self.get_bullet()
+        self.next_bullet = self.get_bubble()
         self.charge()
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
             for col, cell in enumerate(self.cells[row]):
-                i = randint(0, 5)
-                kit = BUBBLES[i]
+                kit = self.get_bubble()
                 bubble = Bubble(kit.file, kit.color, cell.center, self)
                 cell.bubble = bubble
 
@@ -276,13 +279,12 @@ class Shooter:
             self.charge()
             self.status = Status.READY
 
-    def get_bullet(self):
-        i = randint(0, 5)
-        return BUBBLES[i]
+    def get_bubble(self):
+        return random.choice(BUBBLES)
 
     def charge(self):
         bullet = self.next_bullet
-        self.next_bullet = self.get_bullet()
+        self.next_bullet = self.get_bubble()
         self.bullet = Bullet(bullet.file, bullet.color, self)
 
     def _find_cross_point(self, pt1, pt2, pt3, pt4):
@@ -505,28 +507,37 @@ class BaseBubble(pygame.sprite.Sprite):
         self.color = color
         self.status = Status.STAY
         self.shooter = shooter
+        self.create_sound()
+
+    def create_sound(self):
+        self.sound_pop = pygame.mixer.Sound('sounds/bubble.wav')
 
     def move(self):
-        self.speed_x = randint(-10, 10)
+        self.speed_x = random.randint(-10, 10)
         self.speed_y = 2
 
     def update(self):
         if self.status == Status.MOVE:
             self.rect.centerx += self.speed_x
             self.rect.centery += self.speed_y
+
             if self.rect.left < WINDOW.left:
+                self.sound_pop.play()
                 self.rect.left = WINDOW.left
                 self.speed_x = -self.speed_x
 
             if self.rect.right > WINDOW.right:
+                self.sound_pop.play()
                 self.rect.right = WINDOW.right
                 self.speed_x = -self.speed_x
 
             if self.rect.top < WINDOW.top:
+                self.sound_pop.play()
                 self.rect.top = WINDOW.top
                 self.speed_y = -self.speed_y
 
             if (idx := self.rect.collidelist(self.shooter.bars)) > -1:
+                self.sound_pop.play()
                 bar = self.shooter.bars[idx]
                 if self.rect.left <= bar.right < self.rect.right:
                     self.rect.left = bar.right
@@ -538,6 +549,7 @@ class BaseBubble(pygame.sprite.Sprite):
                     self.rect.bottom = bar.top + 10
 
             if self.rect.bottom > WINDOW.height:
+                self.sound_pop.play()
                 self.shooter.score.add(self.rect.centerx)
                 self.kill()
 
@@ -605,9 +617,11 @@ class Bullet(BaseBubble):
             self.rect.centery = pt.y
 
             if self.rect.left < WINDOW.left:
+                self.sound_pop.play()
                 self.rect.left = WINDOW.left
 
             if self.rect.right > WINDOW.right:
+                self.sound_pop.play()
                 self.rect.right = WINDOW.right
 
             if self.idx + 1 < len(self.course):
@@ -616,6 +630,7 @@ class Bullet(BaseBubble):
                 self.shooter.dest.bubble = self
                 self.status = Status.STAY
 
+                self.sound_pop.play()
                 self.drop_same_color_bubbles()
                 self.drop_floating_bubbles()
                 self.shooter.status = Status.CHARGE
@@ -657,8 +672,8 @@ class Bullet(BaseBubble):
             for cell in top:
                 self._get_floating(cell, connected)
             bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
-            diff = bubbles - connected
-            self.drop_bubbles(diff)
+            if diff := bubbles - connected:
+                self.drop_bubbles(diff)
 
 
 def main():
