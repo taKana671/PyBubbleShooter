@@ -8,6 +8,8 @@ from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP,
     KEYDOWN, MOUSEBUTTONDOWN, Rect)
 
 
+import time
+
 # color
 COLOR_GREEN = (0, 100, 0)
 DARK_GREEN = (0, 80, 0)
@@ -56,6 +58,7 @@ class Status(Enum):
     MOVE = auto()
     CHARGE = auto()
     SHOT = auto()
+    GAMEOVER = auto()
 
 
 Point = namedtuple('Point', 'x y')
@@ -103,12 +106,24 @@ class Cell:
         y = Y_START_POS + BUBBLE_SIZE * self.row
         self.center = Point(x, y)
 
+    def move_bubble(self, move_to):
+        self.bubble.rect.centerx = move_to.center.x
+        self.bubble.rect.centery = move_to.center.y
+        move_to.bubble = self.bubble
+        self.bubble = None
+
+    def delete_bubble(self):
+        if self.bubble:
+            self.bubble = self.bubble.kill()
+
 
 class Shooter:
 
     def __init__(self, screen, score, droppings):
         self.screen = screen
         self.score = score
+        self.bubbles = BUBBLES[:]
+        self.colors = 4
         self.droppings_group = droppings
         self.sysfont = pygame.font.SysFont(None, 30)
         self.dest = None
@@ -116,8 +131,9 @@ class Shooter:
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_launcher()
         self.create_rects()
-        self.create_bubbles(12)
+        self.create_bubbles(5)
         self.status = Status.READY
+        self.increase = False
 
     def create_launcher(self):
         self.launcher = Point(WINDOW.half_width, WINDOW.height)
@@ -127,11 +143,12 @@ class Shooter:
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
         self.bullet_holder = Point(WINDOW.half_width, 635)
         self.next_bullet = self.get_bubble()
+        self.start_time = time.time()
         self.charge()
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
-            for col, cell in enumerate(self.cells[row]):
+            for cell in self.cells[row]:
                 kit = self.get_bubble()
                 bubble = Bubble(kit.file, kit.color, cell.center, self)
                 cell.bubble = bubble
@@ -280,7 +297,7 @@ class Shooter:
             self.status = Status.READY
 
     def get_bubble(self):
-        return random.choice(BUBBLES)
+        return random.choice(self.bubbles)
 
     def charge(self):
         bullet = self.next_bullet
@@ -467,6 +484,50 @@ class Shooter:
         if self.status == Status.READY and self.dest:
             self.status = Status.SHOT
             self.bullet.shoot()
+
+    def move_bubbles(self):
+        result = True
+        for cells in self.cells[::-1]:
+            for cell in cells:
+                if cell.bubble:
+                    if (row := cell.row + 5) >= ROWS:
+                        result = False
+                    move_to = self.cells[row][cell.col]
+                    cell.move_bubble(move_to)
+        self.create_bubbles(5)
+        return result
+
+    def delete_bubbles(self):
+        for cells in self.cells:
+            for cell in cells:
+                cell.delete_bubble()
+
+    def increase_bubbles(self):
+        count = self.count_bubbles()
+        if count == 0:
+            self.status == Status.GAMEOVER
+            print('gameover')
+        elif count <= 20:
+            if self.colors > 0:
+                self.colors -= 1
+            if self.colors <= 3:
+                self.delete_bubbles()
+                self.bubbles = random.sample(BUBBLES, self.colors)
+                self.create_bubbles(10)
+            else:
+                self.bubbles = random.sample(BUBBLES, self.colors)
+                if not self.move_bubbles():
+                    self.status == Status.GAMEOVER
+                    print('gameover')
+        else:
+            if not self.move_bubbles():
+                self.status == Status.GAMEOVER
+                print('gameover')
+
+    def count_bubbles(self):
+        total = sum(
+            sum(True if cell.bubble else False for cell in cells) for cells in self.cells)
+        return total
 
 
 class Score:
@@ -689,6 +750,9 @@ def main():
     score = Score(screen)
     bubble_shooter = Shooter(screen, score, droppings)
     clock = pygame.time.Clock()
+
+    my_event = pygame.USEREVENT + 1
+    pygame.time.set_timer(my_event, 60000 * 3)
     pygame.key.set_repeat(100, 100)
 
     while True:
@@ -711,6 +775,10 @@ def main():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
+            if event.type == my_event:
+                bubble_shooter.increase_bubbles()
+                # bubble_shooter.increase = True
+                # print('1 minutes')
             # if event.type == MOUSEBUTTONDOWN and event.button == 1:
             #     bubble_shooter.shoot()
             if event.type == KEYDOWN:
