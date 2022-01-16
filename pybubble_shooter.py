@@ -123,7 +123,8 @@ class Shooter:
         self.screen = screen
         self.score = score
         self.bubbles = BUBBLES[:]
-        self.colors = 4
+        self.colors = len(self.bubbles)
+        self.is_increase = False
         self.droppings_group = droppings
         self.sysfont = pygame.font.SysFont(None, 30)
         self.dest = None
@@ -131,9 +132,8 @@ class Shooter:
         self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.create_launcher()
         self.create_rects()
-        self.create_bubbles(5)
+        self.create_bubbles(12)
         self.status = Status.READY
-        self.increase = False
 
     def create_launcher(self):
         self.launcher = Point(WINDOW.half_width, WINDOW.height)
@@ -272,6 +272,17 @@ class Shooter:
 
     def update(self):
         self.draw_setting()
+
+        count = self.count_bubbles()
+        if not count:
+            self.status = Status.GAMEOVER
+            print('Game over')
+
+        if self.is_increase:
+            if not self.change_bubbles(count):
+                self.status = Status.GAMEOVER
+                print('Game over')
+            self.is_increase = False
 
         if 0 < self.launcher_angle <= self.limit_angle:
             y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
@@ -485,16 +496,19 @@ class Shooter:
             self.status = Status.SHOT
             self.bullet.shoot()
 
-    def move_bubbles(self):
+    def increase(self):
+        self.is_increase = True
+
+    def increase_bubbles(self, rows):
         result = True
         for cells in self.cells[::-1]:
             for cell in cells:
                 if cell.bubble:
-                    if (row := cell.row + 5) >= ROWS:
+                    if (row := cell.row + rows) >= ROWS:
                         result = False
                     move_to = self.cells[row][cell.col]
                     cell.move_bubble(move_to)
-        self.create_bubbles(5)
+        self.create_bubbles(rows)
         return result
 
     def delete_bubbles(self):
@@ -502,27 +516,20 @@ class Shooter:
             for cell in cells:
                 cell.delete_bubble()
 
-    def increase_bubbles(self):
-        count = self.count_bubbles()
-        if count == 0:
-            self.status == Status.GAMEOVER
-            print('gameover')
-        elif count <= 20:
+    def change_bubbles(self, count):
+        if count > 20:
+            return self.increase_bubbles(5)
+        else:
             if self.colors > 0:
                 self.colors -= 1
-            if self.colors <= 3:
+            self.bubbles = random.sample(BUBBLES, self.colors)
+
+            if len(self.bubbles) <= 2:
                 self.delete_bubbles()
-                self.bubbles = random.sample(BUBBLES, self.colors)
                 self.create_bubbles(10)
             else:
-                self.bubbles = random.sample(BUBBLES, self.colors)
-                if not self.move_bubbles():
-                    self.status == Status.GAMEOVER
-                    print('gameover')
-        else:
-            if not self.move_bubbles():
-                self.status == Status.GAMEOVER
-                print('gameover')
+                return self.increase_bubbles(10)
+        return True
 
     def count_bubbles(self):
         total = sum(
@@ -776,7 +783,7 @@ def main():
                 pygame.quit()
                 sys.exit()
             if event.type == my_event:
-                bubble_shooter.increase_bubbles()
+                bubble_shooter.increase()
                 # bubble_shooter.increase = True
                 # print('1 minutes')
             # if event.type == MOUSEBUTTONDOWN and event.button == 1:
