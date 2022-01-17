@@ -8,12 +8,11 @@ from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP,
     KEYDOWN, MOUSEBUTTONDOWN, Rect)
 
 
-import time
-
 # color
 COLOR_GREEN = (0, 100, 0)
 DARK_GREEN = (0, 80, 0)
 RIGHT_GRAY = (178, 178, 178)
+WHITE = (255, 255, 250)
 
 YELLOW_GREEN = (153, 255, 102)
 BLUE = (0, 0, 255)
@@ -59,6 +58,8 @@ class Status(Enum):
     CHARGE = auto()
     SHOT = auto()
     GAMEOVER = auto()
+    PLAY = auto()
+    START = auto()
 
 
 Point = namedtuple('Point', 'x y')
@@ -120,12 +121,12 @@ class Cell:
 class Shooter:
 
     def __init__(self, screen, score, droppings):
+        self.droppings_group = droppings
         self.screen = screen
         self.score = score
         self.bubbles = BUBBLES[:]
         self.colors = len(self.bubbles)
         self.is_increase = False
-        self.droppings_group = droppings
         self.sysfont = pygame.font.SysFont(None, 30)
         self.dest = None
         self.target = None
@@ -134,6 +135,7 @@ class Shooter:
         self.create_rects()
         self.create_bubbles(12)
         self.status = Status.READY
+        self.game = Status.START
 
     def create_launcher(self):
         self.launcher = Point(WINDOW.half_width, WINDOW.height)
@@ -143,7 +145,6 @@ class Shooter:
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
         self.bullet_holder = Point(WINDOW.half_width, 635)
         self.next_bullet = self.get_bubble()
-        self.start_time = time.time()
         self.charge()
 
     def create_bubbles(self, rows=15):
@@ -744,50 +745,94 @@ class Bullet(BaseBubble):
                 self.drop_bubbles(diff)
 
 
+class GameStart(pygame.sprite.Sprite):
+
+    def __init__(self, file, screen, shooter):
+        super().__init__(self.containers)
+        self.screen = screen
+        self.shooter = shooter
+        self.image = pygame.image.load(file).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (50, 50))
+        self.rect = self.image.get_rect()
+        self.rect.centerx = WINDOW.half_width
+        self.rect.centery = 400
+        self.create_texts()
+
+    def get_font(self):
+        for size in range(40, 51):
+            yield pygame.font.SysFont(None, size)
+        for size in range(50, 41, -1):
+            yield pygame.font.SysFont(None, size)
+
+    def create_texts(self):
+        self.title_font = pygame.font.SysFont(None, 60)
+        self.start_fonts = [font for font in self.get_font()]
+        self.idx = -1
+        self.title = self.title_font.render('Bubble Shooter Game', True, WHITE)
+        self.start = 'START'
+
+    def update(self):
+        self.screen.blit(self.title, (40, 200))
+
+        font = self.start_fonts[self.idx]
+        text = font.render(self.start, True, PINK)
+        x, _ = font.size(self.start)
+        self.screen.blit(text, ((WINDOW.width - x) // 2, 320))
+        self.idx += 1
+        if self.idx >= len(self.start_fonts):
+            self.idx = -1
+        pygame.time.wait(100)
+
+    def click(self, x, y):
+        if self.rect.collidepoint(x, y):
+            self.shooter.game = Status.PLAY
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode(SCREEN.size)
     pygame.display.set_caption('PyBubbleShooter')
+
     bubbles = pygame.sprite.RenderUpdates()
     droppings = pygame.sprite.RenderUpdates()
+    start = pygame.sprite.RenderUpdates()
 
     Bubble.containers = bubbles
     Bullet.containers = bubbles
+    GameStart.containers = start
 
     score = Score(screen)
     bubble_shooter = Shooter(screen, score, droppings)
+    game_start = GameStart('images/button_start.png', screen, bubble_shooter)
     clock = pygame.time.Clock()
 
-    my_event = pygame.USEREVENT + 1
-    pygame.time.set_timer(my_event, 60000 * 3)
+    bubble_event = pygame.USEREVENT + 1
+    pygame.time.set_timer(bubble_event, 60000 * 3)
     pygame.key.set_repeat(100, 100)
 
     while True:
         clock.tick(60)
         screen.fill(COLOR_GREEN)
 
-        bubble_shooter.update()
-        bubbles.update()
-        bubbles.draw(screen)
-        droppings.draw(screen)
-        score.update()
-
-        # x, y = pygame.mouse.get_rel()
-        # if x > 0:
-        #     bubble_shooter.move_right()
-        # if x < 0:
-        #     bubble_shooter.move_left()
+        if bubble_shooter.game == Status.START:
+            start.update()
+            start.draw(screen)
+        elif bubble_shooter.game == Status.PLAY:
+            bubble_shooter.update()
+            bubbles.update()
+            bubbles.draw(screen)
+            droppings.draw(screen)
+            score.update()
 
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == my_event:
+            if event.type == bubble_event:
                 bubble_shooter.increase()
-                # bubble_shooter.increase = True
-                # print('1 minutes')
-            # if event.type == MOUSEBUTTONDOWN and event.button == 1:
-            #     bubble_shooter.shoot()
+            if event.type == MOUSEBUTTONDOWN and event.button == 1:
+                if bubble_shooter.game == Status.START:
+                    game_start.click(*event.pos)
             if event.type == KEYDOWN:
                 if event.key == K_RIGHT:
                     bubble_shooter.move_right()
