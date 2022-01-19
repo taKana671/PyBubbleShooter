@@ -108,10 +108,11 @@ class Cell:
         self.center = Point(x, y)
 
     def move_bubble(self, move_to):
-        self.bubble.rect.centerx = move_to.center.x
-        self.bubble.rect.centery = move_to.center.y
-        move_to.bubble = self.bubble
-        self.bubble = None
+        if not move_to.bubble:
+            self.bubble.rect.centerx = move_to.center.x
+            self.bubble.rect.centery = move_to.center.y
+            move_to.bubble = self.bubble
+            self.bubble = None
 
     def delete_bubble(self):
         if self.bubble:
@@ -273,41 +274,46 @@ class Shooter:
             self.screen.blit(text, (place, 540))
 
     def update(self):
-        self.draw_setting()
-        # self.game = Status.GAMEOVER
-        count = self.count_bubbles()
-        if not count:
-            self.game = Status.GAMEOVER
-            print('Game over')
+        if self.game == Status.PLAY:
+            self.draw_setting()
 
-        if self.is_increase:
-            if not self.change_bubbles(count):
+            if any(cell.bubble for cell in self.cells[-1]):
+                pygame.time.wait(1000)
                 self.game = Status.GAMEOVER
                 print('Game over')
-            self.is_increase = False
 
-        if 0 < self.launcher_angle <= self.limit_angle:
-            y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
-            pt = Point(WINDOW.width, y)
-            self.course = [line for line in self.simulate_shoot_right(self.launcher, pt)]
-        elif self.launcher_angle >= 180 - self.limit_angle:
-            y = WINDOW.height - self.calculate_height(180 - self.launcher_angle, WINDOW.half_width)
-            pt = Point(0, y)
-            self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
-        else:
-            if self.limit_angle < self.launcher_angle <= 90:
-                x = WINDOW.half_width + self.calculate_height(90 - self.launcher_angle, WINDOW.height)
-            elif 90 < self.launcher_angle < 180 - self.limit_angle:
-                x = WINDOW.half_width - self.calculate_height(self.launcher_angle - 90, WINDOW.height)
-            self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
+            count = self.count_bubbles()
+            if not count:
+                self.game = Status.GAMEOVER
+                print('Game over')
 
-        if self.dest:
-            for line in self.course:
-                pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
+            if self.is_increase:
+                if not self.change_bubbles(count):
+                    self.game = Status.GAMEOVER
+                self.is_increase = False
 
-        if self.status == Status.CHARGE:
-            self.charge()
-            self.status = Status.READY
+            if 0 < self.launcher_angle <= self.limit_angle:
+                y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
+                pt = Point(WINDOW.width, y)
+                self.course = [line for line in self.simulate_shoot_right(self.launcher, pt)]
+            elif self.launcher_angle >= 180 - self.limit_angle:
+                y = WINDOW.height - self.calculate_height(180 - self.launcher_angle, WINDOW.half_width)
+                pt = Point(0, y)
+                self.course = [line for line in self.simulate_shoot_left(self.launcher, pt)]
+            else:
+                if self.limit_angle < self.launcher_angle <= 90:
+                    x = WINDOW.half_width + self.calculate_height(90 - self.launcher_angle, WINDOW.height)
+                elif 90 < self.launcher_angle < 180 - self.limit_angle:
+                    x = WINDOW.half_width - self.calculate_height(self.launcher_angle - 90, WINDOW.height)
+                self.course = [line for line in self.simulate_shoot_top(self.launcher, Point(x, 0))]
+
+            if self.dest:
+                for line in self.course:
+                    pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
+
+            if self.status == Status.CHARGE:
+                self.charge()
+                self.status = Status.READY
 
     def get_bubble(self):
         return random.choice(self.bubbles)
@@ -508,14 +514,14 @@ class Shooter:
         self.is_increase = True
 
     def increase_bubbles(self, rows):
+        # print('increase')
         result = True
         for cells in self.cells[::-1]:
             for cell in cells:
                 if cell.bubble:
-                    if (row := cell.row + rows) >= ROWS:
-                        result = False
-                    move_to = self.cells[row][cell.col]
-                    cell.move_bubble(move_to)
+                    if (row := cell.row + rows) < ROWS:
+                        move_to = self.cells[row][cell.col]
+                        cell.move_bubble(move_to)
         self.create_bubbles(rows)
         return result
 
@@ -806,6 +812,13 @@ class GameOver(StartButton):
         self.screen.blit(self.surface, (0, 0))
         self.scale_message(200, self.text, PINK)
 
+    def click(self, x, y):
+        if self.rect.collidepoint(x, y):
+            self.shooter.game = Status.PLAY
+            self.shooter.delete_bubbles()
+            self.shooter.create_bubbles(10)
+            self.shooter.charge(True)
+
 
 class GameStart(StartButton):
 
@@ -852,6 +865,7 @@ def main():
     clock = pygame.time.Clock()
 
     bubble_event = pygame.USEREVENT + 1
+    # pygame.time.set_timer(bubble_event, 10000)
     pygame.time.set_timer(bubble_event, 60000 * 3)
     pygame.key.set_repeat(100, 100)
 
@@ -882,6 +896,8 @@ def main():
             if event.type == MOUSEBUTTONDOWN and event.button == 1:
                 if bubble_shooter.game == Status.START:
                     game_start.click(*event.pos)
+                if bubble_shooter.game == Status.GAMEOVER:
+                    game_over.click(*event.pos)
             if event.type == KEYDOWN:
                 if event.key == K_RIGHT:
                     bubble_shooter.move_right()
