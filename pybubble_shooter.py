@@ -125,20 +125,24 @@ class Shooter:
         self.droppings_group = droppings
         self.screen = screen
         self.score = score
-        self.bubbles = BUBBLES[:]
-        self.colors = len(self.bubbles)
-        # self.colors = 3
-        self.is_increase = False
         self.sysfont = pygame.font.SysFont(None, 30)
+        self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
         self.dest = None
         self.target = None
-        self.next_bullet = None
-        self.cells = [[Cell(row, col) for col in range(COLS)] for row in range(ROWS)]
+        self.bullet = None
         self.create_launcher()
-        self.create_rects()
-        self.create_bubbles(10)
-        self.status = Status.READY
+        self.initialize_game()
         self.game = Status.START
+
+    def initialize_game(self):
+        self.bubbles = BUBBLES[:]
+        # self.colors = len(self.bubbles)
+        self.colors = 3
+        self.is_increase = False
+        self.next_bullet = None
+        self.create_bubbles(3)
+        self.charge()
+        self.status = Status.READY
 
     def create_launcher(self):
         self.launcher = Point(WINDOW.half_width, WINDOW.height)
@@ -147,7 +151,7 @@ class Shooter:
         self.limit_angle = round_up(
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
         self.bullet_holder = Point(WINDOW.half_width, 635)
-        self.charge()
+        self.create_rects()
 
     def create_bubbles(self, rows=15):
         for row in range(rows):
@@ -280,14 +284,13 @@ class Shooter:
             if any(cell.bubble for cell in self.cells[-1]):
                 pygame.time.wait(1000)
                 self.game = Status.GAMEOVER
-                print('Game over')
 
             count = self.count_bubbles()
-            if not count:
+            if count == 0 and len(self.droppings_group.sprites()) == 0:
+                pygame.time.wait(1000)
                 self.game = Status.GAMEOVER
-                print('Game over')
 
-            if self.is_increase:
+            if self.is_increase and count > 0:
                 if not self.change_bubbles(count):
                     self.game = Status.GAMEOVER
                 self.is_increase = False
@@ -318,14 +321,14 @@ class Shooter:
     def get_bubble(self):
         return random.choice(self.bubbles)
 
-    def charge(self, replace=False):
-        if replace:
-            self.next_bullet = None
-            self.bullet.kill()
+    def charge(self):
         if not self.next_bullet:
+            if self.bullet:
+                self.bullet = self.bullet.kill()
             bullet = self.get_bubble()
         else:
             bullet = self.next_bullet
+
         self.next_bullet = self.get_bubble()
         self.bullet = Bullet(bullet.file, bullet.color, self)
 
@@ -514,7 +517,6 @@ class Shooter:
         self.is_increase = True
 
     def increase_bubbles(self, rows):
-        # print('increase')
         result = True
         for cells in self.cells[::-1]:
             for cell in cells:
@@ -537,7 +539,8 @@ class Shooter:
             if self.colors > 1:
                 self.colors -= 1
             self.bubbles = random.sample(BUBBLES, self.colors)
-            self.charge(True)
+            self.next_bullet = None
+            self.charge()
 
             if len(self.bubbles) <= 2:
                 self.delete_bubbles()
@@ -775,7 +778,7 @@ class StartButton(pygame.sprite.Sprite):
     def create_surface(self):
         self.surface = pygame.Surface(
             (SCREEN.width, SCREEN.height), flags=pygame.SRCALPHA)
-        self.surface.fill((0, 51, 0, 180))
+        self.surface.fill((0, 51, 0, 128))
 
     def get_font(self):
         for size in range(40, 51):
@@ -815,9 +818,7 @@ class GameOver(StartButton):
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
             self.shooter.game = Status.PLAY
-            self.shooter.delete_bubbles()
-            self.shooter.create_bubbles(10)
-            self.shooter.charge(True)
+            self.shooter.initialize_game()
 
 
 class GameStart(StartButton):
