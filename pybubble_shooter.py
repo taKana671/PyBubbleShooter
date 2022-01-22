@@ -58,6 +58,7 @@ class Status(Enum):
     CHARGE = auto()
     SHOT = auto()
     GAMEOVER = auto()
+    WIN = auto()
     PLAY = auto()
     START = auto()
 
@@ -131,16 +132,18 @@ class Shooter:
         self.target = None
         self.bullet = None
         self.create_launcher()
+        self.create_sound()
         self.initialize_game()
         self.game = Status.START
 
     def initialize_game(self):
         self.bubbles = BUBBLES[:]
-        # self.colors = len(self.bubbles)
-        self.colors = 3
+        self.colors = len(self.bubbles)
+        # self.bubbles = BUBBLES[:1]
+        # self.colors = 1
         self.is_increase = False
         self.next_bullet = None
-        self.create_bubbles(3)
+        self.create_bubbles(10)
         self.charge()
         self.status = Status.READY
 
@@ -166,6 +169,9 @@ class Shooter:
             if i > 0:
                 # 105, 210, 315, 420, 525
                 self.bars.append(Rect(105 * i, 540, 5, 55))
+
+    def create_sound(self):
+        self.fanfare = pygame.mixer.Sound('sounds/fanfare.wav')
 
     def simulate_shoot_right(self, start, end):
         """Yield lines on which a bullet shot to the right first will move.
@@ -263,6 +269,21 @@ class Shooter:
             return False, Line(start, end)
         return True, None
 
+    def set_timer(self, seconds):
+        last = pygame.time.get_ticks()
+        while True:
+            now = pygame.time.get_ticks()
+            if now - last >= seconds:
+                break
+
+    def quit_game(self, status):
+        print(status)
+        if status == Status.WIN:
+            self.set_timer(1000)
+            self.fanfare.play()
+        self.set_timer(1000)
+        self.game = status
+
     def draw_setting(self):
         pygame.draw.rect(self.screen, DARK_GREEN, (0, 600, WINDOW.width, 50))
         pygame.draw.circle(
@@ -282,17 +303,15 @@ class Shooter:
             self.draw_setting()
 
             if any(cell.bubble for cell in self.cells[-1]):
-                pygame.time.wait(1000)
-                self.game = Status.GAMEOVER
+                self.quit_game(Status.GAMEOVER)
 
             count = self.count_bubbles()
             if count == 0 and len(self.droppings_group.sprites()) == 0:
-                pygame.time.wait(1000)
-                self.game = Status.GAMEOVER
+                self.quit_game(Status.WIN)
 
             if self.is_increase and count > 0:
                 if not self.change_bubbles(count):
-                    self.game = Status.GAMEOVER
+                    self.quit_game(Status.GAMEOVER)
                 self.is_increase = False
 
             if 0 < self.launcher_angle <= self.limit_angle:
@@ -753,13 +772,13 @@ class Bullet(BaseBubble):
     def drop_floating_bubbles(self):
         """Get bubbles that are connected to the top to drop them.
         """
-        if top := [cell for cell in self.shooter.cells[0] if cell.bubble]:
-            connected = set(top)
-            for cell in top:
-                self._get_floating(cell, connected)
-            bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
-            if diff := bubbles - connected:
-                self.drop_bubbles(diff)
+        top = [cell for cell in self.shooter.cells[0] if cell.bubble]
+        connected = set(top)
+        for cell in top:
+            self._get_floating(cell, connected)
+        bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
+        if diff := bubbles - connected:
+            self.drop_bubbles(diff)
 
 
 class StartButton(pygame.sprite.Sprite):
@@ -801,27 +820,37 @@ class StartButton(pygame.sprite.Sprite):
         pygame.time.wait(100)
 
 
-class GameOver(StartButton):
+class RetryGame(StartButton):
 
     def __init__(self, file, screen, shooter):
         super().__init__(file, screen, shooter)
         self.rect.centerx = WINDOW.half_width
-        self.rect.centery = 300
+        self.rect.centery = 350
 
     def create_texts(self):
+        gameover_font = pygame.font.SysFont(None, 60)
+        self.gameover = gameover_font.render('GAME OVER', True, WHITE)
+        self.score_font = pygame.font.SysFont(None, 50)
+        self.score = 'Score: {}'
         self.text = 'CONTINUE'
 
     def update(self):
         self.screen.blit(self.surface, (0, 0))
-        self.scale_message(200, self.text, PINK)
+        score = self.score_font.render(
+            self.score.format(self.shooter.score.score), True, WHITE)
+        self.screen.blit(score, (30, 30))
+        if self.shooter.game == Status.GAMEOVER:
+            self.screen.blit(self.gameover, (130, 200))
+        self.scale_message(280, self.text, PINK)
 
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
             self.shooter.game = Status.PLAY
+            self.shooter.delete_bubbles()
             self.shooter.initialize_game()
 
 
-class GameStart(StartButton):
+class StartGame(StartButton):
 
     def __init__(self, file, screen, shooter):
         super().__init__(file, screen, shooter)
@@ -829,8 +858,8 @@ class GameStart(StartButton):
         self.rect.centery = 400
 
     def create_texts(self):
-        self.title_font = pygame.font.SysFont(None, 60)
-        self.title = self.title_font.render('Bubble Shooter Game', True, WHITE)
+        title_font = pygame.font.SysFont(None, 60)
+        self.title = title_font.render('Bubble Shooter Game', True, WHITE)
         self.text = 'START'
 
     def update(self):
@@ -851,22 +880,22 @@ def main():
     bubbles = pygame.sprite.RenderUpdates()
     droppings = pygame.sprite.RenderUpdates()
     start = pygame.sprite.RenderUpdates()
-    gameover = pygame.sprite.RenderUpdates()
+    retry = pygame.sprite.RenderUpdates()
 
     Bubble.containers = bubbles
     Bullet.containers = bubbles
-    GameStart.containers = start
-    GameOver.containers = gameover
+    StartGame.containers = start
+    RetryGame.containers = retry
 
     score = Score(screen)
     bubble_shooter = Shooter(screen, score, droppings)
-    game_start = GameStart('images/button_start.png', screen, bubble_shooter)
-    game_over = GameOver('images/button_start.png', screen, bubble_shooter)
+    start_game = StartGame('images/button_start.png', screen, bubble_shooter)
+    retry_game = RetryGame('images/button_start.png', screen, bubble_shooter)
 
     clock = pygame.time.Clock()
 
     bubble_event = pygame.USEREVENT + 1
-    # pygame.time.set_timer(bubble_event, 10000)
+    # pygame.time.set_timer(bubble_event, 1000)
     pygame.time.set_timer(bubble_event, 60000 * 3)
     pygame.key.set_repeat(100, 100)
 
@@ -884,9 +913,9 @@ def main():
         elif bubble_shooter.game == Status.PLAY:
             droppings.draw(screen)
             score.update()
-        elif bubble_shooter.game == Status.GAMEOVER:
-            gameover.update()
-            gameover.draw(screen)
+        elif bubble_shooter.game in (Status.GAMEOVER, Status.WIN):
+            retry.update()
+            retry.draw(screen)
 
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -896,15 +925,17 @@ def main():
                 bubble_shooter.increase()
             if event.type == MOUSEBUTTONDOWN and event.button == 1:
                 if bubble_shooter.game == Status.START:
-                    game_start.click(*event.pos)
-                if bubble_shooter.game == Status.GAMEOVER:
-                    game_over.click(*event.pos)
+                    start_game.click(*event.pos)
+                if bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
+                    retry_game.click(*event.pos)
             if event.type == KEYDOWN:
+                print(event.key)
                 if event.key == K_RIGHT:
                     bubble_shooter.move_right()
                 if event.key == K_LEFT:
                     bubble_shooter.move_left()
-                if event.key == K_UP:
+                # if event.key in (K_UP, pygame.K_SPACE):
+                if event.key == pygame.K_SPACE:
                     bubble_shooter.shoot()
         pygame.display.update()
 
