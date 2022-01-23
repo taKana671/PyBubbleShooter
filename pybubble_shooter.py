@@ -4,23 +4,10 @@ import random
 import sys
 from collections import namedtuple
 from enum import Enum, auto
+from pathlib import Path
 from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP,
     KEYDOWN, MOUSEBUTTONDOWN, Rect)
 
-
-# color
-COLOR_GREEN = (0, 100, 0)
-DARK_GREEN = (0, 80, 0)
-RIGHT_GRAY = (178, 178, 178)
-WHITE = (255, 255, 250)
-
-YELLOW_GREEN = (153, 255, 102)
-BLUE = (0, 0, 255)
-PINK = (255, 102, 255)
-PURPLE = (204, 0, 255)
-RED = (255, 0, 0)
-RIGHT_BLUE = (0, 255, 255)
-DEEP_GREEN = (0, 51, 0)
 
 # bubbles
 Y_START_POS = 15
@@ -40,14 +27,66 @@ WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
 
 BubbleKit = namedtuple('BubbleKit', 'file color color_code')
 
+
+class Files(Enum):
+
+    def __init__(self, name, dir):
+        self._name = name
+        self._dir = dir
+
+    @property
+    def path(self):
+        return Path(self._dir, self._name)
+
+
+class ImageFiles(Files):
+
+    BALL_BLUE = 'ball_blue.png'
+    BALL_GREEN = 'ball_green.png'
+    BALL_PINK = 'ball_pink.png'
+    BALL_PURPLE = 'ball_purple.png'
+    BALL_RED = 'ball_red.png'
+    BALL_SKY = 'ball_sky.png'
+    BUTTON_START = 'button_start.png'
+
+    def __init__(self, name):
+        super().__init__(name, 'images')
+
+
+class SoundFiles(Files):
+
+    FANFARE = 'fanfare.wav'
+    SOUND_POP = 'bubble.wav'
+
+    def __init__(self, name):
+        super().__init__(name, 'sounds')
+
+
+class Colors(Enum):
+
+    YELLOW_GREEN = ('yellow_green', (153, 255, 102))
+    BLUE = ('blue', (0, 0, 255))
+    PINK = ('pink', (255, 102, 255))
+    PURPLE = ('purple', (204, 0, 255))
+    RED = ('red', (255, 0, 0))
+    RIGHT_BLUE = ('sky', (0, 255, 255))
+    GREEN = ('green', (0, 100, 0))
+    DARK_GREEN = ('dark_green', (0, 80, 0))
+    RIGHT_GRAY = ('right_gray', (178, 178, 178))
+    WHITE = ('white', (255, 255, 250))
+
+    def __init__(self, color_name, color_code):
+        self.color_name = color_name
+        self.color_code = color_code
+
+
 BUBBLES = [
-    BubbleKit('images/ball_blue.png', 'blue', BLUE),
-    BubbleKit('images/ball_green.png', 'green', YELLOW_GREEN),
-    BubbleKit('images/ball_pink.png', 'pink', PINK),
-    BubbleKit('images/ball_purple.png', 'purple', PURPLE),
-    BubbleKit('images/ball_red.png', 'red', RED),
-    BubbleKit('images/ball_sky.png', 'sky', RIGHT_BLUE),
-]
+    BubbleKit(ImageFiles.BALL_BLUE, Colors.BLUE.color_name, Colors.BLUE.color_code),
+    BubbleKit(ImageFiles.BALL_GREEN, Colors.YELLOW_GREEN.color_name, Colors.YELLOW_GREEN.color_code),
+    BubbleKit(ImageFiles.BALL_PINK, Colors.PINK.color_name, Colors.PINK.color_code),
+    BubbleKit(ImageFiles.BALL_PURPLE, Colors.PURPLE.color_name, Colors.PURPLE.color_code),
+    BubbleKit(ImageFiles.BALL_RED, Colors.RED.color_name, Colors.RED.color_code),
+    BubbleKit(ImageFiles.BALL_SKY, Colors.RIGHT_BLUE.color_name, Colors.RIGHT_BLUE.color_code)]
 
 
 class Status(Enum):
@@ -160,7 +199,7 @@ class Shooter:
         for row in range(rows):
             for cell in self.cells[row]:
                 kit = self.get_bubble()
-                bubble = Bubble(kit.file, kit.color, cell.center, self)
+                bubble = Bubble(kit.file.path, kit.color, cell.center, self)
                 cell.bubble = bubble
 
     def create_rects(self):
@@ -171,7 +210,7 @@ class Shooter:
                 self.bars.append(Rect(105 * i, 540, 5, 55))
 
     def create_sound(self):
-        self.fanfare = pygame.mixer.Sound('sounds/fanfare.wav')
+        self.fanfare = pygame.mixer.Sound(SoundFiles.FANFARE.path)
 
     def simulate_shoot_right(self, start, end):
         """Yield lines on which a bullet shot to the right first will move.
@@ -277,7 +316,6 @@ class Shooter:
                 break
 
     def quit_game(self, status):
-        print(status)
         if status == Status.WIN:
             self.set_timer(1000)
             self.fanfare.play()
@@ -285,17 +323,17 @@ class Shooter:
         self.game = status
 
     def draw_setting(self):
-        pygame.draw.rect(self.screen, DARK_GREEN, (0, 600, WINDOW.width, 50))
+        pygame.draw.rect(
+            self.screen, Colors.DARK_GREEN.color_code, (0, 600, WINDOW.width, 50))
         pygame.draw.circle(
-            self.screen, DARK_GREEN, self.launcher, 20)
-
+            self.screen, Colors.DARK_GREEN.color_code, self.launcher, 20)
         pygame.draw.circle(self.screen, self.next_bullet.color_code, self.bullet_holder, 4)
 
         for bar in self.bars:
-            pygame.draw.rect(self.screen, DARK_GREEN, bar)
+            pygame.draw.rect(self.screen, Colors.DARK_GREEN.color_code, bar)
 
         for num, place in zip(['50', '100', '250', '100', '50'], [49, 140, 250, 350, 460]):
-            text = self.sysfont.render(num, True, RIGHT_GRAY)
+            text = self.sysfont.render(num, True, Colors.RIGHT_GRAY.color_code)
             self.screen.blit(text, (place, 540))
 
     def update(self):
@@ -309,7 +347,7 @@ class Shooter:
             if count == 0 and len(self.droppings_group.sprites()) == 0:
                 self.quit_game(Status.WIN)
 
-            if self.is_increase and count > 0:
+            if self.is_increase and count > 0 and self.bullet.status == Status.STAY:
                 if not self.change_bubbles(count):
                     self.quit_game(Status.GAMEOVER)
                 self.is_increase = False
@@ -331,7 +369,7 @@ class Shooter:
 
             if self.dest:
                 for line in self.course:
-                    pygame.draw.line(self.screen, DARK_GREEN, line.start, line.end, 2)
+                    pygame.draw.line(self.screen, Colors.DARK_GREEN.color_code, line.start, line.end, 2)
 
             if self.status == Status.CHARGE:
                 self.charge()
@@ -349,7 +387,8 @@ class Shooter:
             bullet = self.next_bullet
 
         self.next_bullet = self.get_bubble()
-        self.bullet = Bullet(bullet.file, bullet.color, self)
+        self.bullet = Bullet(
+            bullet.file.path, bullet.color, self)
 
     def _find_cross_point(self, pt1, pt2, pt3, pt4):
         a0 = pt2.x - pt1.x
@@ -560,6 +599,7 @@ class Shooter:
             self.bubbles = random.sample(BUBBLES, self.colors)
             self.next_bullet = None
             self.charge()
+            self.status = Status.READY
 
             if len(self.bubbles) <= 2:
                 self.delete_bubbles()
@@ -594,7 +634,7 @@ class Score:
             self.score += 50
 
     def update(self):
-        text = self.sysfont.render(str(self.score), True, RIGHT_GRAY)
+        text = self.sysfont.render(str(self.score), True, Colors.RIGHT_GRAY.color_code)
         self.screen.blit(text, (10, 615))
 
 
@@ -615,7 +655,8 @@ class BaseBubble(pygame.sprite.Sprite):
         self.create_sound()
 
     def create_sound(self):
-        self.sound_pop = pygame.mixer.Sound('sounds/bubble.wav')
+        # self.sound_pop = pygame.mixer.Sound('sounds/bubble.wav')
+        self.sound_pop = pygame.mixer.Sound(SoundFiles.SOUND_POP.path)
 
     def move(self):
         self.speed_x = random.randint(-10, 10)
@@ -829,7 +870,8 @@ class RetryGame(StartButton):
 
     def create_texts(self):
         gameover_font = pygame.font.SysFont(None, 60)
-        self.gameover = gameover_font.render('GAME OVER', True, WHITE)
+        self.gameover = gameover_font.render(
+            'GAME OVER', True, Colors.WHITE.color_code)
         self.score_font = pygame.font.SysFont(None, 50)
         self.score = 'Score: {}'
         self.text = 'CONTINUE'
@@ -837,11 +879,11 @@ class RetryGame(StartButton):
     def update(self):
         self.screen.blit(self.surface, (0, 0))
         score = self.score_font.render(
-            self.score.format(self.shooter.score.score), True, WHITE)
+            self.score.format(self.shooter.score.score), True, Colors.WHITE.color_code)
         self.screen.blit(score, (30, 30))
         if self.shooter.game == Status.GAMEOVER:
             self.screen.blit(self.gameover, (130, 200))
-        self.scale_message(280, self.text, PINK)
+        self.scale_message(280, self.text, Colors.PINK.color_code)
 
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
@@ -859,13 +901,14 @@ class StartGame(StartButton):
 
     def create_texts(self):
         title_font = pygame.font.SysFont(None, 60)
-        self.title = title_font.render('Bubble Shooter Game', True, WHITE)
+        self.title = title_font.render(
+            'Bubble Shooter Game', True, Colors.WHITE.color_code)
         self.text = 'START'
 
     def update(self):
         self.screen.blit(self.surface, (0, 0))
         self.screen.blit(self.title, (40, 200))
-        self.scale_message(320, self.text, PINK)
+        self.scale_message(320, self.text, Colors.PINK.color_code)
 
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
@@ -889,8 +932,9 @@ def main():
 
     score = Score(screen)
     bubble_shooter = Shooter(screen, score, droppings)
-    start_game = StartGame('images/button_start.png', screen, bubble_shooter)
-    retry_game = RetryGame('images/button_start.png', screen, bubble_shooter)
+
+    start_game = StartGame(ImageFiles.BUTTON_START.path, screen, bubble_shooter)
+    retry_game = RetryGame(ImageFiles.BUTTON_START.path, screen, bubble_shooter)
 
     clock = pygame.time.Clock()
 
@@ -901,7 +945,7 @@ def main():
 
     while True:
         clock.tick(60)
-        screen.fill(COLOR_GREEN)
+        screen.fill(Colors.GREEN.color_code)
 
         bubble_shooter.update()
         bubbles.update()
@@ -929,12 +973,10 @@ def main():
                 if bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
                     retry_game.click(*event.pos)
             if event.type == KEYDOWN:
-                print(event.key)
                 if event.key == K_RIGHT:
                     bubble_shooter.move_right()
                 if event.key == K_LEFT:
                     bubble_shooter.move_left()
-                # if event.key in (K_UP, pygame.K_SPACE):
                 if event.key == pygame.K_SPACE:
                     bubble_shooter.shoot()
         pygame.display.update()
