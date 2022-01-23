@@ -178,8 +178,8 @@ class Shooter:
     def initialize_game(self):
         self.bubbles = BUBBLES[:]
         self.colors = len(self.bubbles)
-        # self.bubbles = BUBBLES[:1]
-        # self.colors = 1
+        # self.bubbles = BUBBLES[:4]
+        # self.colors = 4
         self.is_increase = False
         self.next_bullet = None
         self.create_bubbles(10)
@@ -347,11 +347,15 @@ class Shooter:
             if count == 0 and len(self.droppings_group.sprites()) == 0:
                 self.quit_game(Status.WIN)
 
-            if self.is_increase and count > 0 and self.bullet.status == Status.STAY:
-                if not self.change_bubbles(count):
-                    self.quit_game(Status.GAMEOVER)
-                self.is_increase = False
-
+            if count > 0 and self.bullet.status == Status.STAY:
+                if count <= 20:
+                    if not self.change_bubbles(count):
+                        self.quit_game(Status.GAMEOVER)
+                if self.is_increase:
+                    if not self.increase_bubbles(5):
+                        self.quit_game(Status.GAMEOVER)     
+                    self.is_increase = False
+                
             if 0 < self.launcher_angle <= self.limit_angle:
                 y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
                 pt = Point(WINDOW.width, y)
@@ -591,21 +595,18 @@ class Shooter:
                 cell.delete_bubble()
 
     def change_bubbles(self, count):
-        if count > 20:
-            return self.increase_bubbles(5)
-        else:
-            if self.colors > 1:
-                self.colors -= 1
-            self.bubbles = random.sample(BUBBLES, self.colors)
-            self.next_bullet = None
-            self.charge()
-            self.status = Status.READY
+        if self.colors > 1:
+            self.colors -= 1
+        self.bubbles = random.sample(BUBBLES, self.colors)
+        self.next_bullet = None
+        self.charge()
+        self.status = Status.READY
 
-            if len(self.bubbles) <= 2:
-                self.delete_bubbles()
-                self.create_bubbles(10)
-            else:
-                return self.increase_bubbles(10)
+        if len(self.bubbles) <= 2:
+            self.delete_bubbles()
+            self.create_bubbles(10)
+        else:
+            return self.increase_bubbles(10)
         return True
 
     def count_bubbles(self):
@@ -655,12 +656,11 @@ class BaseBubble(pygame.sprite.Sprite):
         self.create_sound()
 
     def create_sound(self):
-        # self.sound_pop = pygame.mixer.Sound('sounds/bubble.wav')
         self.sound_pop = pygame.mixer.Sound(SoundFiles.SOUND_POP.path)
 
     def move(self):
-        self.speed_x = random.randint(-10, 10)
-        self.speed_y = 2
+        self.speed_x = random.randint(-5, 5)
+        self.speed_y = random.randint(-5, 5) or 2
 
     def update(self):
         if self.status == Status.MOVE:
