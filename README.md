@@ -19,6 +19,6 @@ A python implementation of BubbleShooter Game
 ```
 
 ### Controls:
-* Press right arrow key to move a bullet to the right.
-* Press left arrow key to move a bullet to the left.
+* Press right arrow key to move a bullet course line to the right.
+* Press left arrow key to move a bullet course line to the left.
 * Press space key to shoot.
