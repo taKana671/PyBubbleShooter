@@ -3,7 +3,7 @@
 A python implementation of BubbleShooter Game
 
 # Demo
-![pybubbleshooter_demo](https://user-images.githubusercontent.com/48859041/150668580-f6a6fe03-56c8-4752-95a3-98e53b0ebda7.gif)
+![pybubbleshooter_demo](https://user-images.githubusercontent.com/48859041/150682602-214d0747-e7d1-47a5-824f-7086eaa21c95.gif)
 
 # Requirements
 * Python 3.8
