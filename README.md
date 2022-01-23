@@ -1,4 +1,5 @@
 # PyBubbleShooter
 
+A python implementation of BubbleShooter Game
 
-## Under construction.......
+## Demo
