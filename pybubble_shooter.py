@@ -15,17 +15,12 @@ X_START_POS = 16
 ROWS = 20
 COLS = 17
 BUBBLE_SIZE = 30
-
 # screen
 SCREEN = Rect(0, 0, 526, 650)
 
 
 Window = namedtuple('Window', 'width height top bottom left right half_width')
-
 WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
-
-
-BubbleKit = namedtuple('BubbleKit', 'file color color_code')
 
 
 class Files(Enum):
@@ -74,10 +69,14 @@ class Colors(Enum):
     DARK_GREEN = ('dark_green', (0, 80, 0))
     RIGHT_GRAY = ('right_gray', (178, 178, 178))
     WHITE = ('white', (255, 255, 250))
+    TRANSPARENT_GREEN = ('transparent_green', (0, 51, 0, 128))
 
     def __init__(self, color_name, color_code):
         self.color_name = color_name
         self.color_code = color_code
+
+
+BubbleKit = namedtuple('BubbleKit', 'file color color_code')
 
 
 BUBBLES = [
@@ -352,10 +351,10 @@ class Shooter:
                     if not self.change_bubbles(count):
                         self.quit_game(Status.GAMEOVER)
                 if self.is_increase:
-                    if not self.increase_bubbles(5):
-                        self.quit_game(Status.GAMEOVER)     
+                    if not self.increase_bubbles(4):
+                        self.quit_game(Status.GAMEOVER)
                     self.is_increase = False
-                
+
             if 0 < self.launcher_angle <= self.limit_angle:
                 y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
                 pt = Point(WINDOW.width, y)
@@ -838,7 +837,8 @@ class StartButton(pygame.sprite.Sprite):
     def create_surface(self):
         self.surface = pygame.Surface(
             (SCREEN.width, SCREEN.height), flags=pygame.SRCALPHA)
-        self.surface.fill((0, 51, 0, 128))
+        self.surface.fill(Colors.TRANSPARENT_GREEN.color_code)
+        self.surface_position = Point(0, 0)
 
     def get_font(self):
         for size in range(40, 51):
@@ -877,7 +877,8 @@ class RetryGame(StartButton):
         self.text = 'CONTINUE'
 
     def update(self):
-        self.screen.blit(self.surface, (0, 0))
+        self.surface_position
+        self.screen.blit(self.surface, self.surface_position)
         score = self.score_font.render(
             self.score.format(self.shooter.score.score), True, Colors.WHITE.color_code)
         self.screen.blit(score, (30, 30))
@@ -906,7 +907,7 @@ class StartGame(StartButton):
         self.text = 'START'
 
     def update(self):
-        self.screen.blit(self.surface, (0, 0))
+        self.screen.blit(self.surface, self.surface_position)
         self.screen.blit(self.title, (40, 200))
         self.scale_message(320, self.text, Colors.PINK.color_code)
 
