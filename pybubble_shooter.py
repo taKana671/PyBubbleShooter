@@ -5,8 +5,15 @@ import sys
 from collections import namedtuple
 from enum import Enum, auto
 from pathlib import Path
-from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP,
+from pygame.locals import (QUIT, K_DOWN, K_RIGHT, K_LEFT, K_UP, K_SPACE,
     KEYDOWN, MOUSEBUTTONDOWN, Rect)
+
+
+Window = namedtuple('Window', 'width height top bottom left right half_width')
+WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
+
+Point = namedtuple('Point', 'x y')
+Line = namedtuple('Line', 'start end')
 
 
 # bubbles
@@ -17,10 +24,16 @@ COLS = 17
 BUBBLE_SIZE = 30
 # screen
 SCREEN = Rect(0, 0, 526, 650)
-
-
-Window = namedtuple('Window', 'width height top bottom left right half_width')
-WINDOW = Window(526, 600, 0, 600, 0, 526, 526 // 2)
+# start screen
+SURFACE_LEFT = Point(0, 0)
+GAME_TITLE = Point(40, 200)
+START_Y = 320
+GAME_START_BUTTON = Point(WINDOW.half_width, 400)
+# game over screen
+GAMEOVER_TITLE = Point(130, 200)
+FINAL_SCORE = Point(30, 30)
+CONTINUE_Y = 280
+GAME_RETRY_BUTTON = Point(WINDOW.half_width, 350)
 
 
 class Files(Enum):
@@ -95,14 +108,11 @@ class Status(Enum):
     MOVE = auto()
     CHARGE = auto()
     SHOT = auto()
+    WAIT = auto()
     GAMEOVER = auto()
     WIN = auto()
     PLAY = auto()
     START = auto()
-
-
-Point = namedtuple('Point', 'x y')
-Line = namedtuple('Line', 'start end')
 
 
 def round_up(value):
@@ -838,7 +848,6 @@ class StartButton(pygame.sprite.Sprite):
         self.surface = pygame.Surface(
             (SCREEN.width, SCREEN.height), flags=pygame.SRCALPHA)
         self.surface.fill(Colors.TRANSPARENT_GREEN.color_code)
-        self.surface_position = Point(0, 0)
 
     def get_font(self):
         for size in range(40, 51):
@@ -865,8 +874,8 @@ class RetryGame(StartButton):
 
     def __init__(self, file, screen, shooter):
         super().__init__(file, screen, shooter)
-        self.rect.centerx = WINDOW.half_width
-        self.rect.centery = 350
+        self.rect.centerx = GAME_RETRY_BUTTON.x
+        self.rect.centery = GAME_RETRY_BUTTON.y
 
     def create_texts(self):
         gameover_font = pygame.font.SysFont(None, 60)
@@ -877,14 +886,13 @@ class RetryGame(StartButton):
         self.text = 'CONTINUE'
 
     def update(self):
-        self.surface_position
-        self.screen.blit(self.surface, self.surface_position)
+        self.screen.blit(self.surface, SURFACE_LEFT)
         score = self.score_font.render(
             self.score.format(self.shooter.score.score), True, Colors.WHITE.color_code)
-        self.screen.blit(score, (30, 30))
+        self.screen.blit(score, FINAL_SCORE)
         if self.shooter.game == Status.GAMEOVER:
-            self.screen.blit(self.gameover, (130, 200))
-        self.scale_message(280, self.text, Colors.PINK.color_code)
+            self.screen.blit(self.gameover, GAMEOVER_TITLE)
+        self.scale_message(CONTINUE_Y, self.text, Colors.PINK.color_code)
 
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
@@ -897,8 +905,8 @@ class StartGame(StartButton):
 
     def __init__(self, file, screen, shooter):
         super().__init__(file, screen, shooter)
-        self.rect.centerx = WINDOW.half_width
-        self.rect.centery = 400
+        self.rect.centerx = GAME_START_BUTTON.x
+        self.rect.centery = GAME_START_BUTTON.y
 
     def create_texts(self):
         title_font = pygame.font.SysFont(None, 60)
@@ -907,9 +915,9 @@ class StartGame(StartButton):
         self.text = 'START'
 
     def update(self):
-        self.screen.blit(self.surface, self.surface_position)
-        self.screen.blit(self.title, (40, 200))
-        self.scale_message(320, self.text, Colors.PINK.color_code)
+        self.screen.blit(self.surface, SURFACE_LEFT)
+        self.screen.blit(self.title, GAME_TITLE)
+        self.scale_message(START_Y, self.text, Colors.PINK.color_code)
 
     def click(self, x, y):
         if self.rect.collidepoint(x, y):
@@ -940,7 +948,7 @@ def main():
     clock = pygame.time.Clock()
 
     bubble_event = pygame.USEREVENT + 1
-    # pygame.time.set_timer(bubble_event, 1000)
+    # pygame.time.set_timer(bubble_event, 15000)
     pygame.time.set_timer(bubble_event, 60000 * 3)
     pygame.key.set_repeat(100, 100)
 
@@ -978,7 +986,7 @@ def main():
                     bubble_shooter.move_right()
                 if event.key == K_LEFT:
                     bubble_shooter.move_left()
-                if event.key == pygame.K_SPACE:
+                if event.key == K_SPACE:
                     bubble_shooter.shoot()
         pygame.display.update()
 
