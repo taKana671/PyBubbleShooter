@@ -108,7 +108,6 @@ class Status(Enum):
     MOVE = auto()
     CHARGE = auto()
     SHOT = auto()
-    WAIT = auto()
     GAMEOVER = auto()
     WIN = auto()
     PLAY = auto()
@@ -186,9 +185,7 @@ class Shooter:
 
     def initialize_game(self):
         self.bubbles = BUBBLES[:]
-        self.colors = len(self.bubbles)
-        # self.bubbles = BUBBLES[:4]
-        # self.colors = 4
+        self.colors_count = len(self.bubbles)
         self.is_increase = False
         self.next_bullet = None
         self.create_bubbles(10)
@@ -324,12 +321,12 @@ class Shooter:
             if now - last >= seconds:
                 break
 
-    def quit_game(self, status):
-        if status == Status.WIN:
-            self.set_timer(1000)
-            self.fanfare.play()
-        self.set_timer(1000)
-        self.game = status
+    def quit_game(self):
+        if len(self.droppings_group.sprites()) == 0:
+            if self.status == Status.WIN:
+                self.set_timer(1000)
+                self.fanfare.play()
+            self.game = self.status
 
     def draw_setting(self):
         pygame.draw.rect(
@@ -349,21 +346,23 @@ class Shooter:
         if self.game == Status.PLAY:
             self.draw_setting()
 
-            if any(cell.bubble for cell in self.cells[-1]):
-                self.quit_game(Status.GAMEOVER)
+            if self.status == Status.READY:
+                count = self.count_bubbles()
+                if count == 0:
+                    self.status = Status.WIN
 
-            count = self.count_bubbles()
-            if count == 0 and len(self.droppings_group.sprites()) == 0:
-                self.quit_game(Status.WIN)
+                if count > 0 and self.bullet.status == Status.STAY:
+                    if count <= 20:
+                        self.change_bubbles(count)
+                    if self.is_increase:
+                        self.increase_bubbles(4)
+                        self.is_increase = False
 
-            if count > 0 and self.bullet.status == Status.STAY:
-                if count <= 20:
-                    if not self.change_bubbles(count):
-                        self.quit_game(Status.GAMEOVER)
-                if self.is_increase:
-                    if not self.increase_bubbles(4):
-                        self.quit_game(Status.GAMEOVER)
-                    self.is_increase = False
+                if any(cell.bubble for cell in self.cells[-1]):
+                    self.status = Status.GAMEOVER
+
+            if self.status in {Status.WIN, Status.GAMEOVER}:
+                self.quit_game()
 
             if 0 < self.launcher_angle <= self.limit_angle:
                 y = WINDOW.height - self.calculate_height(self.launcher_angle, WINDOW.half_width)
@@ -588,7 +587,6 @@ class Shooter:
         self.is_increase = True
 
     def increase_bubbles(self, rows):
-        result = True
         for cells in self.cells[::-1]:
             for cell in cells:
                 if cell.bubble:
@@ -596,7 +594,6 @@ class Shooter:
                         move_to = self.cells[row][cell.col]
                         cell.move_bubble(move_to)
         self.create_bubbles(rows)
-        return result
 
     def delete_bubbles(self):
         for cells in self.cells:
@@ -604,9 +601,9 @@ class Shooter:
                 cell.delete_bubble()
 
     def change_bubbles(self, count):
-        if self.colors > 1:
-            self.colors -= 1
-        self.bubbles = random.sample(BUBBLES, self.colors)
+        if self.colors_count > 1:
+            self.colors_count -= 1
+        self.bubbles = random.sample(BUBBLES, self.colors_count)
         self.next_bullet = None
         self.charge()
         self.status = Status.READY
@@ -615,8 +612,7 @@ class Shooter:
             self.delete_bubbles()
             self.create_bubbles(10)
         else:
-            return self.increase_bubbles(10)
-        return True
+            self.increase_bubbles(10)
 
     def count_bubbles(self):
         total = sum(
@@ -783,15 +779,15 @@ class Bullet(BaseBubble):
                 self.idx += 1
             else:
                 self.shooter.dest.bubble = self
-                self.status = Status.STAY
-
                 self.sound_pop.play()
-                self.drop_same_color_bubbles()
+                if not self.drop_same_color_bubbles():
+                    self.status = Status.STAY
                 self.drop_floating_bubbles()
                 self.shooter.status = Status.CHARGE
 
     def drop_bubbles(self, cells):
         for cell in cells:
+            # to display dropping bubbles on top of all the other bubbles.
             self.shooter.droppings_group.add(cell.bubble)
             cell.bubble.move()
             cell.bubble.status = Status.MOVE
@@ -805,12 +801,15 @@ class Bullet(BaseBubble):
                     self._get_same_color(cell, cells)
 
     def drop_same_color_bubbles(self):
-        """Get bubbles that are the same color with a bullet to drop them.
+        """Drop bubbles that are the same color with a bullet.
+           Return False if the same color bubbles are not found.
         """
         cells = set()
         self._get_same_color(self.shooter.dest, cells)
         if len(cells) >= 3:
             self.drop_bubbles(cells)
+            return True
+        return False
 
     def _get_floating(self, cell, cells):
         for cell in self.shooter.scan_bubbles(cell.row, cell.col):
