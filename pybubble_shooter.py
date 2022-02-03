@@ -433,14 +433,9 @@ class Shooter:
         return tc1 * tc2 < 0 and td1 * td2 < 0
 
     def is_crossing(self, pt1, pt2, cell):
-        if cell.row == 0:
-            if any(self._is_crossing(pt1, pt2, line.start, line.end)
-                    for line in (cell.bottom, cell.right, cell.left, cell.top)):
-                return True
-        else:
-            if sum(self._is_crossing(pt1, pt2, line.start, line.end)
-                    for line in (cell.bottom, cell.right, cell.left, cell.top)) == 2:
-                return True
+        if any(self._is_crossing(pt1, pt2, line.start, line.end)
+                for line in (cell.bottom, cell.right, cell.left, cell.top)):
+            return True
         return False
 
     def _trace(self, start, end):
