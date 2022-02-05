@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import TestCase, main, mock
 
 
-from pybubble_shooter import ImageFiles, SoundFiles, Score, Shooter, Point, Line
+from pybubble_shooter import ImageFiles, SoundFiles, Score, Shooter, Point, Line, ROWS, COLS
 
 
 class ShooterBasicTest(TestCase):
@@ -28,7 +28,7 @@ class ShooterBasicTest(TestCase):
 
 
 class ChargeTestCase(ShooterBasicTest):
-    """Test charge method
+    """tests for charge method
     """
 
     def setUp(self):
@@ -87,7 +87,7 @@ class ChargeTestCase(ShooterBasicTest):
 
 
 class FindCrossPointTestCase(ShooterBasicTest):
-    """Test find_cross_point method
+    """tests for find_cross_point method
     """
 
     def setUp(self):
@@ -136,6 +136,184 @@ class FindCrossPointTestCase(ShooterBasicTest):
             self.assertEqual(mock_is_crossing.call_count, 2)
             mock_find_cross_point.assert_called_once_with(
                 pt1, pt2, self.mock_cell.right.start, self.mock_cell.right.end)
+
+
+class IsCrossingTestCase(ShooterBasicTest):
+    """tests for is_crossing method
+    """
+
+    def setUp(self):
+        super().setUp()
+        left = Line(Point(91, 60), Point(91, 90))
+        right = Line(Point(121, 60), Point(121, 90))
+        top = Line(Point(91, 60), Point(121, 60))
+        bottom = Line(Point(91, 90), Point(121, 90))
+        self.mock_cell = mock.MagicMock(
+            left=left, bottom=bottom, right=right, top=top)
+        self.pt1 = Point(0, 1)
+        self.pt2 = Point(1, 0)
+
+    def test_helper_is_crossing(self):
+        """Test return values from _is_crossing method.
+        """
+        tests = [
+            [Point(0, 0), Point(1, 1), Point(0, 1), Point(1, 0)],
+            [Point(0, 0), Point(1, 1), Point(0, 2), Point(3, 2)],
+            [Point(0, 0), Point(2, 0), Point(0, 1), Point(1, 0)]]
+        expects = [True, False, False]
+
+        for test, expect in zip(tests, expects):
+            with self.subTest(test):
+                result = self.shooter._is_crossing(*test)
+                self.assertEqual(result, expect)
+
+    def test_is_crossing_false(self):
+        """Test that is_crossing returns False
+           if no lines intersect line segment pt1pt2.
+        """
+        with mock.patch('pybubble_shooter.Shooter._is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [False for _ in range(4)]
+            result = self.shooter.is_crossing(self.pt1, self.pt2, self.mock_cell)
+            self.assertEqual(result, False)
+
+    def test_is_crossing_true(self):
+        """Test that is_crossing returns True
+           if at least one line intersects line segment pt1pt2.
+        """
+        with mock.patch('pybubble_shooter.Shooter._is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [False, True]
+            result = self.shooter.is_crossing(self.pt1, self.pt2, self.mock_cell)
+            self.assertEqual(result, True)
+
+
+class FindDestinationTestCase(ShooterBasicTest):
+    """tests for find_destination methods
+    """
+
+    def test_trace_start_x(self):
+        """Test _trace method when start.x >= end.x.
+        """
+        cells = [
+            [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
+        start = Point(263, 600)
+        end = Point(0, 400)
+        expects = [(2, 1), (1, 0), (0, 0)]
+
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, True, True, False, False,
+                True, True, False, False, False,
+                True, False, False, False, False]
+
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
+
+    def test_trace_end_x(self):
+        """Test _trace method when start.x < end.x.
+        """
+        cells = [
+            [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
+        start = Point(0, 600)
+        end = Point(400, 0)
+        expects = [(2, 2), (1, 3), (0, 4)]
+
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, False, True, True, False,
+                False, True, True, False, False,
+                True, False, False, False, False]
+
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
+
+    def test_trace_no_empty(self):
+        """Test _trace method when all of the cells have bubble.
+        """
+        bubble = mock.MagicMock()
+        cells = [
+            [mock.MagicMock(row=row, col=col, bubble=bubble) for col in range(5)] for row in range(3)]
+        start = Point(0, 600)
+        end = Point(400, 0)
+        expects = [(2, 2)]
+
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, False, True, True, False,
+                False, True, True, False, False,
+                True, False, False, False, False]
+
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
+
+    def test_trace_target(self):
+        """Test _trace method when target is found.
+        """
+        bubble = mock.MagicMock()
+        cells = [
+            [mock.MagicMock(row=row, col=col, bubble=bubble if row <= 1 else None) for col in range(5)] for row in range(3)]
+        start = Point(263, 600)
+        end = Point(0, 400)
+        expects = [(2, 1), (1, 0)]
+
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, True, True, False, False,
+                True, True, False, False, False,
+                True, False, False, False, False]
+
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
+
+    def test_scan_bubbles(self):
+        """Test scan_bubbles method.
+        """
+        cells = [
+            [mock.MagicMock(row=row, col=col) for col in range(17)] for row in range(20)]
+        tests = [
+            (0, 0), (0, 5), (0, 16),
+            (2, 0), (2, 5), (2, 16),
+            (3, 0), (3, 5), (3, 16)]
+        expects = [
+            [(1, 0), (0, 1)],
+            [(1, 4), (1, 5), (0, 4), (0, 6)],
+            [(1, 15), (1, 16), (0, 15)],
+            [(3, 0), (2, 1), (1, 0)],
+            [(3, 4), (3, 5), (2, 4), (2, 6), (1, 4), (1, 5)],
+            [(3, 15), (3, 16), (2, 15), (1, 15), (1, 16)],
+            [(4, 1), (4, 0), (3, 1), (2, 1), (2, 0)],
+            [(4, 6), (4, 5), (3, 6), (3, 4), (2, 6), (2, 5)],
+            [(4, 16), (3, 15), (2, 16)]]
+
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for test, expect in zip(tests, expects):
+                result = [(cell.row, cell.col) for cell in self.shooter.scan_bubbles(*test)]
+                self.assertEqual(len(result), len(expect))
+                self.assertEqual(result, expect)
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
