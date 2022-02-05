@@ -521,7 +521,7 @@ class Shooter:
                 yield self.cells[row][col - 1]
             if col + 1 < COLS:
                 yield self.cells[row][col + 1]
-        if row % 2 == 0:
+        elif row % 2 == 0:
             if row + 1 < ROWS and col - 1 >= 0:
                 yield self.cells[row + 1][col - 1]
             if row + 1 < ROWS:
