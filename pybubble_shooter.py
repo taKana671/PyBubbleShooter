@@ -466,10 +466,6 @@ class Shooter:
         for cell in self.scan_bubbles(target.row, target.col):
             if not cell.bubble:
                 yield cell
-            else:
-                for candidate in self.scan_bubbles(cell.row, cell.col):
-                    if not cell.bubble:
-                        yield candidate
 
     def select_compare_function(self, target, dest):
         if target.center.x <= dest.center.x:
@@ -506,7 +502,7 @@ class Shooter:
                 return traced[-1], None
             else:
                 dest, target = traced[-2:]
-                if not any(cell for cell in self.scan_bubbles(dest.row, dest.col) if cell.bubble):
+                if not any(cell.bubble for cell in self.scan_bubbles(dest.row, dest.col) if cell.bubble):
                     dest = self._find_destination(target, dest)
                 return dest, target
         return None, None

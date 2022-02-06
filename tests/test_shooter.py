@@ -6,7 +6,8 @@ from pathlib import Path
 from unittest import TestCase, main, mock
 
 
-from pybubble_shooter import ImageFiles, SoundFiles, Score, Shooter, Point, Line, ROWS, COLS
+from pybubble_shooter import (ImageFiles, SoundFiles, Score, Shooter, Point, Line,
+    ROWS, COLS, Cell)
 
 
 class ShooterBasicTest(TestCase):
@@ -306,14 +307,156 @@ class FindDestinationTestCase(ShooterBasicTest):
                 self.assertEqual(len(result), len(expect))
                 self.assertEqual(result, expect)
 
+    def test_scan(self):
+        """Test _scan method.
+        """
+        bubble = mock.MagicMock()
+        cell_with_bubble = [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1)]
+        cells = [
+            [mock.MagicMock(row=row, col=col, bubble=bubble if (row, col) in cell_with_bubble else None) for col in range(17)] for row in range(20)]
+        target = cells[1][1]
 
+        with mock.patch.object(self.shooter, 'cells', cells):
+            result = [(cell.row, cell.col) for cell in self.shooter._scan(target)]
+            self.assertEqual(result, [(2, 2)])
 
+    def test_helper_find_destination(self):
+        """Test _find_destination method.
+        """
+        bubble = mock.MagicMock()
+        cells = [
+            [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
+        for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]:
+            cells[row][col].bubble = bubble
+        target = cells[1][1]
+        tests = (cells[3][2], cells[3][1], cells[3][0])
+        expects = [(2, 2), (2, 2), (2, 1)]
 
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for dest, expect in zip(tests, expects):
+                result = self.shooter._find_destination(target, dest)
+                self.assertEqual((result.row, result.col), expect)
 
+    def test_helper_not_find_destination(self):
+        """Test _find_destination method.
+        """
+        bubble = mock.MagicMock()
+        cells = [
+            [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
+        for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1), (2, 2)]:
+            cells[row][col].bubble = bubble
+        target = cells[1][1]
+        tests = (cells[3][2], cells[3][1], cells[3][0])
 
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for dest in tests:
+                result = self.shooter._find_destination(target, dest)
+                self.assertEqual(result, None)
 
+    def test_find_destination_traced_one_cell(self):
+        """Test find_destination method when _trace yield one cell.
+        """
+        start = Point(263, 600)
+        end = Point(0, 400)
 
+        def _trace(start, end):
+            yield mock.MagicMock()
 
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (None, None))
+
+    def test_find_destination_dest(self):
+        """Test find_destination method when dest is found and target is None.
+        """
+        start = Point(263, 600)
+        end = Point(0, 400)
+
+        def _trace(start, end):
+            for row, col in [(5, 3), (4, 2), (3, 1), (2, 0)]:
+                yield mock.MagicMock(row=row, col=col, bubble=None)
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest.row, dest.col, target), (2, 0, None))
+
+    def test_find_destination_dest_changed(self):
+        """Test find_destination method when dest is changed by _find_destination
+        """
+        changed_dest = mock.MagicMock()
+        cells = [
+            mock.MagicMock(row=5, col=3, bubble=None),
+            mock.MagicMock(row=4, col=2, bubble=None),
+            mock.MagicMock(row=2, col=0, bubble=mock.MagicMock())]
+        start, end = Point(263, 600), Point(0, 400)
+        mock_dest, mock_target = cells[-2:]
+
+        def _trace(start, end):
+            for cell in cells:
+                yield cell
+
+        def scan_bubbles(row, col):
+            for _ in range(6):
+                yield mock.MagicMock(bubble=None)
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
+                mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
+                mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
+            mock_trace.return_value = _trace(start, end)
+            mock_scan_bubble.return_value = scan_bubbles(4, 2)
+            mock_helper_find_destination.return_value = changed_dest
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (changed_dest, mock_target))
+            mock_helper_find_destination.assert_called_once_with(mock_target, mock_dest)
+
+    def test_find_destination_dest_not_changed(self):
+        """Test find_destination method when dest is not changed by _find_destination.
+        """
+        changed_dest = mock.MagicMock()
+        cells = [
+            mock.MagicMock(row=5, col=3, bubble=None),
+            mock.MagicMock(row=4, col=2, bubble=None),
+            mock.MagicMock(row=2, col=0, bubble=mock.MagicMock())]
+        start, end = Point(263, 600), Point(0, 400)
+        mock_dest, mock_target = cells[-2:]
+
+        def _trace(start, end):
+            for cell in cells:
+                yield cell
+
+        def scan_bubbles(row, col):
+            for i in range(6):
+                if i == 3:
+                    yield mock.MagicMock(bubble=mock.MagicMock())
+                else:
+                    yield mock.MagicMock(bubble=None)
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
+                mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
+                mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
+            mock_trace.return_value = _trace(start, end)
+            mock_scan_bubble.return_value = scan_bubbles(4, 2)
+            mock_helper_find_destination.return_value = changed_dest
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (mock_dest, mock_target))
+            mock_helper_find_destination.assert_not_called()
+
+    def test_find_destination_dest_trace_no_cell(self):
+        """Test find_destination method when _trace yield no cells.
+        """
+        start, end = Point(263, 600), Point(0, 400)
+
+        def _trace(start, end):
+            for i in range(3):
+                if i > 3:
+                    yield mock.MagicMock()
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (None, None))
 
 
 if __name__ == '__main__':
