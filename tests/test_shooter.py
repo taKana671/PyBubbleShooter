@@ -21,7 +21,7 @@ class ShooterBasicTest(TestCase):
 
         screen = mock.MagicMock()
         dropping = mock.MagicMock()
-        score = mock.MagicMock(spec=Score)
+        score = mock.MagicMock()
         self.shooter = Shooter(screen, dropping, score)
 
     def tearDown(self):
@@ -36,9 +36,8 @@ class ChargeTestCase(ShooterBasicTest):
         super().setUp()
         self.mock_bullet_class = mock.patch('pybubble_shooter.Bullet').start()
         self.mock_get_bubble = mock.patch('pybubble_shooter.Shooter.get_bubble').start()
-        self.mock_kill = mock.MagicMock(return_value=None)
         self.mock_bullet = mock.MagicMock()
-        self.mock_bullet.kill = self.mock_kill
+        self.mock_bullet.kill.return_value = None
 
         self.bullets = [
             mock.MagicMock(**{'file.path': 'test_red.png', 'color': 'red'}),
@@ -50,14 +49,17 @@ class ChargeTestCase(ShooterBasicTest):
         """
         mock_next_bullet = mock.MagicMock(**{'file.path': 'test.png', 'color': 'red'})
         self.mock_get_bubble.return_value = self.mock_bullet
+        new_bullet = mock.MagicMock()
+        self.mock_bullet_class.return_value = new_bullet
 
         with mock.patch.object(self.shooter, 'next_bullet', mock_next_bullet, create=True):
             self.shooter.charge()
             self.mock_get_bubble.assert_called_once()
-            self.mock_kill.assert_not_called()
+            self.mock_bullet.kill.assert_not_called()
             self.mock_bullet_class.assert_called_once_with(
                 mock_next_bullet.file.path, mock_next_bullet.color, self.shooter)
             self.assertEqual(self.shooter.next_bullet, self.mock_bullet)
+            self.assertEqual(self.shooter.bullet, new_bullet)
 
     def test_charge_next_bullet_is_none(self):
         """when next_bullet is None and bullet is not None.
@@ -67,7 +69,7 @@ class ChargeTestCase(ShooterBasicTest):
         with mock.patch.object(self.shooter, 'next_bullet', None, create=True), \
                 mock.patch.object(self.shooter, 'bullet', self.mock_bullet):
             self.shooter.charge()
-            self.mock_kill.assert_called_once()
+            self.mock_bullet.kill.assert_called_once()
             self.assertEqual(self.mock_get_bubble.call_count, 2)
             self.mock_bullet_class.assert_called_once_with(
                 self.bullets[0].file.path, self.bullets[0].color, self.shooter)
@@ -77,14 +79,16 @@ class ChargeTestCase(ShooterBasicTest):
         """when both of next_bullet and bullet are None.
         """
         self.mock_get_bubble.side_effect = self.bullets
+        new_bullet = mock.MagicMock()
+        self.mock_bullet_class.return_value = new_bullet
 
         with mock.patch.object(self.shooter, 'next_bullet', None, create=True):
             self.shooter.charge()
-            self.mock_kill.assert_not_called()
             self.assertEqual(self.mock_get_bubble.call_count, 2)
             self.mock_bullet_class.assert_called_once_with(
                 self.bullets[0].file.path, self.bullets[0].color, self.shooter)
             self.assertEqual(self.shooter.next_bullet, self.bullets[1])
+            self.assertEqual(self.shooter.bullet, new_bullet)
 
 
 class FindCrossPointTestCase(ShooterBasicTest):
@@ -196,8 +200,7 @@ class FindDestinationTestCase(ShooterBasicTest):
         """
         cells = [
             [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
-        start = Point(263, 600)
-        end = Point(0, 400)
+        start, end = Point(263, 600), Point(0, 400)
         expects = [(2, 1), (1, 0), (0, 0)]
 
         with mock.patch.object(self.shooter, 'cells', cells), \
@@ -218,8 +221,7 @@ class FindDestinationTestCase(ShooterBasicTest):
         """
         cells = [
             [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
-        start = Point(0, 600)
-        end = Point(400, 0)
+        start, end = Point(0, 600), Point(400, 0)
         expects = [(2, 2), (1, 3), (0, 4)]
 
         with mock.patch.object(self.shooter, 'cells', cells), \
@@ -238,11 +240,9 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_trace_no_empty(self):
         """Test _trace method when all of the cells have bubble.
         """
-        bubble = mock.MagicMock()
         cells = [
-            [mock.MagicMock(row=row, col=col, bubble=bubble) for col in range(5)] for row in range(3)]
-        start = Point(0, 600)
-        end = Point(400, 0)
+            [mock.MagicMock(row=row, col=col, bubble=object()) for col in range(5)] for row in range(3)]
+        start, end = Point(0, 600), Point(400, 0)
         expects = [(2, 2)]
 
         with mock.patch.object(self.shooter, 'cells', cells), \
@@ -261,11 +261,9 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_trace_target(self):
         """Test _trace method when target is found.
         """
-        bubble = mock.MagicMock()
         cells = [
-            [mock.MagicMock(row=row, col=col, bubble=bubble if row <= 1 else None) for col in range(5)] for row in range(3)]
-        start = Point(263, 600)
-        end = Point(0, 400)
+            [mock.MagicMock(row=row, col=col, bubble=object() if row <= 1 else None) for col in range(5)] for row in range(3)]
+        start, end = Point(263, 600), Point(0, 400)
         expects = [(2, 1), (1, 0)]
 
         with mock.patch.object(self.shooter, 'cells', cells), \
@@ -310,10 +308,9 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_scan(self):
         """Test _scan method.
         """
-        bubble = mock.MagicMock()
         cell_with_bubble = [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1)]
         cells = [
-            [mock.MagicMock(row=row, col=col, bubble=bubble if (row, col) in cell_with_bubble else None) for col in range(17)] for row in range(20)]
+            [mock.MagicMock(row=row, col=col, bubble=object() if (row, col) in cell_with_bubble else None) for col in range(17)] for row in range(20)]
         target = cells[1][1]
 
         with mock.patch.object(self.shooter, 'cells', cells):
@@ -323,11 +320,10 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_helper_find_destination(self):
         """Test _find_destination method.
         """
-        bubble = mock.MagicMock()
         cells = [
             [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
         for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]:
-            cells[row][col].bubble = bubble
+            cells[row][col].bubble = object()
         target = cells[1][1]
         tests = (cells[3][2], cells[3][1], cells[3][0])
         expects = [(2, 2), (2, 2), (2, 1)]
@@ -340,11 +336,10 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_helper_not_find_destination(self):
         """Test _find_destination method.
         """
-        bubble = mock.MagicMock()
         cells = [
             [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
         for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1), (2, 2)]:
-            cells[row][col].bubble = bubble
+            cells[row][col].bubble = object()
         target = cells[1][1]
         tests = (cells[3][2], cells[3][1], cells[3][0])
 
@@ -356,8 +351,7 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_find_destination_traced_one_cell(self):
         """Test find_destination method when _trace yield one cell.
         """
-        start = Point(263, 600)
-        end = Point(0, 400)
+        start, end = Point(263, 600), Point(0, 400)
 
         def _trace(start, end):
             yield mock.MagicMock()
@@ -370,8 +364,7 @@ class FindDestinationTestCase(ShooterBasicTest):
     def test_find_destination_dest(self):
         """Test find_destination method when dest is found and target is None.
         """
-        start = Point(263, 600)
-        end = Point(0, 400)
+        start, end = Point(263, 600), Point(0, 400)
 
         def _trace(start, end):
             for row, col in [(5, 3), (4, 2), (3, 1), (2, 0)]:
@@ -457,6 +450,46 @@ class FindDestinationTestCase(ShooterBasicTest):
             mock_trace.return_value = _trace(start, end)
             dest, target = self.shooter.find_destination(start, end)
             self.assertEqual((dest, target), (None, None))
+
+
+class ChangeBubblesTestCase(ShooterBasicTest):
+    """tests for change_bubbles
+    """
+ 
+    def test_delete_bubbles(self):
+        """Test delete_bubbles method.
+        """ 
+        mock_cell_class = mock.MagicMock(spec=Cell)
+        mock_cell = mock_cell_class.return_value
+        cells = [[mock_cell for _ in range(5)] for _ in range(5)]
+    
+        with mock.patch.object(self.shooter, 'cells', cells):
+            self.shooter.delete_bubbles()
+            self.assertEqual(mock_cell.delete_bubble.call_count, 25)
+           
+    def create_cell(self, row, col, bubble):
+        return mock.create_autospec(
+            spec=Cell, spec_set=True, instance=True, row=row, col=col, bubble=bubble)
+
+    def test_increase_bubbles(self):
+        """Test increase_bubbles method.
+        """
+        cells = [[self.create_cell(row, col, object() if row < 3 else None) \
+            for col in range(COLS)] for row in range(ROWS)]
+     
+        with mock.patch('pybubble_shooter.Shooter.create_bubbles') as mock_create_bubbles, \
+                mock.patch.object(self.shooter, 'cells', cells):
+            self.shooter.increase_bubbles(3)
+            for i, row in enumerate(cells):
+                for j, mock_cell in enumerate(row):
+                    with self.subTest():
+                        if i < 3:
+                            mock_cell.move_bubble.assert_called_once_with(cells[i + 3][j])
+                        else:
+                            mock_cell.move_bubble.assert_not_called()
+
+            mock_create_bubbles.assert_called_once_with(3)
+
 
 
 if __name__ == '__main__':
