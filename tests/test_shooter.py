@@ -44,6 +44,10 @@ class ShooterBasicTest(TestCase):
         )
         return cell
 
+    def get_cells(self, row, col, bubble):
+        return mock.create_autospec(
+            spec=Cell, spec_set=True, instance=True, row=row, col=col, bubble=bubble)
+
 
 class ChargeTestCase(ShooterBasicTest):
     """tests for charge method
@@ -192,315 +196,369 @@ class IsCrossingTestCase(ShooterBasicTest):
             self.assertEqual(result, True)
 
 
-# class FindDestinationTestCase(ShooterBasicTest):
-#     """tests for find_destination methods
-#     """
+class FindDestinationTestCase(ShooterBasicTest):
+    """tests for find_destination methods
+    """
 
-#     def test_trace_start_x(self):
-#         """Test _trace method when start.x >= end.x.
-#         """
-#         cells = [
-#             [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
-#         start, end = Point(263, 600), Point(0, 400)
-#         expects = [(2, 1), (1, 0), (0, 0)]
+    def test_trace_start_x(self):
+        """Test _trace method when start.x >= end.x.
+        """
+        cells = [[self.get_cells(r, c, None) for c in range(5)] for r in range(3)]
+        start, end = Point(263, 600), Point(0, 400)
+        expects = [(2, 1), (1, 0), (0, 0)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells), \
-#                 mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-#             mock_is_crossing.side_effect = [
-#                 False, True, True, False, False,
-#                 True, True, False, False, False,
-#                 True, False, False, False, False]
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, True, True, False, False,
+                True, True, False, False, False,
+                True, False, False, False, False]
 
-#             traced = [cell for cell in self.shooter._trace(start, end)]
-#             self.assertEqual(len(traced), len(expects))
-#             for cell, expect in zip(traced, expects):
-#                 with self.subTest():
-#                     self.assertEqual((cell.row, cell.col), expect)
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
 
-#     def test_trace_end_x(self):
-#         """Test _trace method when start.x < end.x.
-#         """
-#         cells = [
-#             [mock.MagicMock(row=row, col=col, bubble=None) for col in range(5)] for row in range(3)]
-#         start, end = Point(0, 600), Point(400, 0)
-#         expects = [(2, 2), (1, 3), (0, 4)]
+    def test_trace_end_x(self):
+        """Test _trace method when start.x < end.x.
+        """
+        cells = [[self.get_cells(r, c, None) for c in range(5)] for r in range(3)]
+        start, end = Point(0, 600), Point(400, 0)
+        expects = [(2, 2), (1, 3), (0, 4)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells), \
-#                 mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-#             mock_is_crossing.side_effect = [
-#                 False, False, True, True, False,
-#                 False, True, True, False, False,
-#                 True, False, False, False, False]
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, False, True, True, False,
+                False, True, True, False, False,
+                True, False, False, False, False]
 
-#             traced = [cell for cell in self.shooter._trace(start, end)]
-#             self.assertEqual(len(traced), len(expects))
-#             for cell, expect in zip(traced, expects):
-#                 with self.subTest():
-#                     self.assertEqual((cell.row, cell.col), expect)
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
 
-#     def test_trace_no_empty(self):
-#         """Test _trace method when all of the cells have bubble.
-#         """
-#         cells = [
-#             [mock.MagicMock(row=row, col=col, bubble=object()) for col in range(5)] for row in range(3)]
-#         start, end = Point(0, 600), Point(400, 0)
-#         expects = [(2, 2)]
+    def test_trace_no_empty(self):
+        """Test _trace method when all of the cells have bubble.
+        """
+        bubble = object()
+        cells = [[self.get_cells(r, c, bubble) for c in range(5)] for r in range(3)]
+        start, end = Point(0, 600), Point(400, 0)
+        expects = [(2, 2)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells), \
-#                 mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-#             mock_is_crossing.side_effect = [
-#                 False, False, True, True, False,
-#                 False, True, True, False, False,
-#                 True, False, False, False, False]
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, False, True, True, False,
+                False, True, True, False, False,
+                True, False, False, False, False]
 
-#             traced = [cell for cell in self.shooter._trace(start, end)]
-#             self.assertEqual(len(traced), len(expects))
-#             for cell, expect in zip(traced, expects):
-#                 with self.subTest():
-#                     self.assertEqual((cell.row, cell.col), expect)
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
 
-#     def test_trace_target(self):
-#         """Test _trace method when target is found.
-#         """
-#         cells = [
-#             [mock.MagicMock(row=row, col=col, bubble=object() if row <= 1 else None) for col in range(5)] for row in range(3)]
-#         start, end = Point(263, 600), Point(0, 400)
-#         expects = [(2, 1), (1, 0)]
+    def test_trace_target(self):
+        """Test _trace method when target is found.
+        """
+        bubble = object()
+        cells = [[self.get_cells(r, c, bubble if r <= 1 else None) for c in range(5)] for r in range(3)]
+        start, end = Point(263, 600), Point(0, 400)
+        expects = [(2, 1), (1, 0)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells), \
-#                 mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-#             mock_is_crossing.side_effect = [
-#                 False, True, True, False, False,
-#                 True, True, False, False, False,
-#                 True, False, False, False, False]
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = [
+                False, True, True, False, False,
+                True, True, False, False, False,
+                True, False, False, False, False]
 
-#             traced = [cell for cell in self.shooter._trace(start, end)]
-#             self.assertEqual(len(traced), len(expects))
-#             for cell, expect in zip(traced, expects):
-#                 with self.subTest():
-#                     self.assertEqual((cell.row, cell.col), expect)
+            traced = [cell for cell in self.shooter._trace(start, end)]
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
 
-#     def test_scan_bubbles(self):
-#         """Test scan_bubbles method.
-#         """
-#         cells = [
-#             [mock.MagicMock(row=row, col=col) for col in range(17)] for row in range(20)]
-#         tests = [
-#             (0, 0), (0, 5), (0, 16),
-#             (2, 0), (2, 5), (2, 16),
-#             (3, 0), (3, 5), (3, 16)]
-#         expects = [
-#             [(1, 0), (0, 1)],
-#             [(1, 4), (1, 5), (0, 4), (0, 6)],
-#             [(1, 15), (1, 16), (0, 15)],
-#             [(3, 0), (2, 1), (1, 0)],
-#             [(3, 4), (3, 5), (2, 4), (2, 6), (1, 4), (1, 5)],
-#             [(3, 15), (3, 16), (2, 15), (1, 15), (1, 16)],
-#             [(4, 1), (4, 0), (3, 1), (2, 1), (2, 0)],
-#             [(4, 6), (4, 5), (3, 6), (3, 4), (2, 6), (2, 5)],
-#             [(4, 16), (3, 15), (2, 16)]]
+    def test_scan_bubbles(self):
+        """Test scan_bubbles method.
+        """
+        cells = [[self.get_cells(r, c, None) for c in range(COLS)] for r in range(ROWS)]
+        tests = [
+            (0, 0), (0, 5), (0, 16),
+            (2, 0), (2, 5), (2, 16),
+            (3, 0), (3, 5), (3, 16)]
+        expects = [
+            [(1, 0), (0, 1)],
+            [(1, 4), (1, 5), (0, 4), (0, 6)],
+            [(1, 15), (1, 16), (0, 15)],
+            [(3, 0), (2, 1), (1, 0)],
+            [(3, 4), (3, 5), (2, 4), (2, 6), (1, 4), (1, 5)],
+            [(3, 15), (3, 16), (2, 15), (1, 15), (1, 16)],
+            [(4, 1), (4, 0), (3, 1), (2, 1), (2, 0)],
+            [(4, 6), (4, 5), (3, 6), (3, 4), (2, 6), (2, 5)],
+            [(4, 16), (3, 15), (2, 16)]]
 
-#         with mock.patch.object(self.shooter, 'cells', cells):
-#             for test, expect in zip(tests, expects):
-#                 result = [(cell.row, cell.col) for cell in self.shooter.scan_bubbles(*test)]
-#                 self.assertEqual(len(result), len(expect))
-#                 self.assertEqual(result, expect)
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for test, expect in zip(tests, expects):
+                result = [(cell.row, cell.col) for cell in self.shooter.scan_bubbles(*test)]
+                self.assertEqual(len(result), len(expect))
+                self.assertEqual(result, expect)
 
-#     def test_scan(self):
-#         """Test _scan method.
-#         """
-#         cell_with_bubble = [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1)]
-#         cells = [
-#             [mock.MagicMock(row=row, col=col, bubble=object() if (row, col) in cell_with_bubble else None) for col in range(17)] for row in range(20)]
-#         target = cells[1][1]
+    def test_scan(self):
+        """Test _scan method.
+        """
+        cell_with_bubble = [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1)]
+        cells = [[self.get_cells(r, c, object() if (r, c) in cell_with_bubble else None)
+                  for c in range(COLS)] for r in range(ROWS)]
+        target = cells[1][1]
 
-#         with mock.patch.object(self.shooter, 'cells', cells):
-#             result = [(cell.row, cell.col) for cell in self.shooter._scan(target)]
-#             self.assertEqual(result, [(2, 2)])
+        with mock.patch.object(self.shooter, 'cells', cells):
+            result = [(cell.row, cell.col) for cell in self.shooter._scan(target)]
+            self.assertEqual(result, [(2, 2)])
 
-#     def test_helper_find_destination(self):
-#         """Test _find_destination method.
-#         """
-#         cells = [
-#             [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
-#         for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]:
-#             cells[row][col].bubble = object()
-#         target = cells[1][1]
-#         tests = (cells[3][2], cells[3][1], cells[3][0])
-#         expects = [(2, 2), (2, 2), (2, 1)]
+    def test_helper_find_destination(self):
+        """Test _find_destination method.
+        """
+        cells = [[Cell(row=r, col=c) for c in range(COLS)] for r in range(ROWS)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells):
-#             for dest, expect in zip(tests, expects):
-#                 result = self.shooter._find_destination(target, dest)
-#                 self.assertEqual((result.row, result.col), expect)
+        for r, c in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]:
+            cells[r][c].bubble = object()
 
-#     def test_helper_not_find_destination(self):
-#         """Test _find_destination method.
-#         """
-#         cells = [
-#             [Cell(row=row, col=col) for col in range(17)] for row in range(20)]
-#         for row, col in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1), (2, 2)]:
-#             cells[row][col].bubble = object()
-#         target = cells[1][1]
-#         tests = (cells[3][2], cells[3][1], cells[3][0])
+        target = cells[1][1]
+        tests = (cells[3][2], cells[3][1], cells[3][0])
+        expects = [(2, 2), (2, 2), (2, 1)]
 
-#         with mock.patch.object(self.shooter, 'cells', cells):
-#             for dest in tests:
-#                 result = self.shooter._find_destination(target, dest)
-#                 self.assertEqual(result, None)
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for dest, expect in zip(tests, expects):
+                result = self.shooter._find_destination(target, dest)
+                self.assertEqual((result.row, result.col), expect)
 
-#     def test_find_destination_traced_one_cell(self):
-#         """Test find_destination method when _trace yield one cell.
-#         """
-#         start, end = Point(263, 600), Point(0, 400)
+    def test_helper_not_find_destination(self):
+        """Test _find_destination method.
+        """
+        cells = [[Cell(row=r, col=c) for c in range(COLS)] for r in range(ROWS)]
 
-#         def _trace(start, end):
-#             yield mock.MagicMock()
+        for r, c in [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 1), (2, 2)]:
+            cells[r][c].bubble = object()
 
-#         with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
-#             mock_trace.return_value = _trace(start, end)
-#             dest, target = self.shooter.find_destination(start, end)
-#             self.assertEqual((dest, target), (None, None))
+        target = cells[1][1]
+        tests = (cells[3][2], cells[3][1], cells[3][0])
 
-#     def test_find_destination_dest(self):
-#         """Test find_destination method when dest is found and target is None.
-#         """
-#         start, end = Point(263, 600), Point(0, 400)
+        with mock.patch.object(self.shooter, 'cells', cells):
+            for dest in tests:
+                result = self.shooter._find_destination(target, dest)
+                self.assertEqual(result, None)
 
-#         def _trace(start, end):
-#             for row, col in [(5, 3), (4, 2), (3, 1), (2, 0)]:
-#                 yield mock.MagicMock(row=row, col=col, bubble=None)
+    def test_find_destination_traced_one_cell(self):
+        """Test find_destination method when _trace yield one cell.
+        """
+        start, end = Point(263, 600), Point(0, 400)
 
-#         with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
-#             mock_trace.return_value = _trace(start, end)
-#             dest, target = self.shooter.find_destination(start, end)
-#             self.assertEqual((dest.row, dest.col, target), (2, 0, None))
+        def _trace(start, end):
+            yield mock.MagicMock()
 
-#     def test_find_destination_dest_changed(self):
-#         """Test find_destination method when dest is changed by _find_destination
-#         """
-#         changed_dest = mock.MagicMock()
-#         cells = [
-#             mock.MagicMock(row=5, col=3, bubble=None),
-#             mock.MagicMock(row=4, col=2, bubble=None),
-#             mock.MagicMock(row=2, col=0, bubble=mock.MagicMock())]
-#         start, end = Point(263, 600), Point(0, 400)
-#         mock_dest, mock_target = cells[-2:]
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (None, None))
 
-#         def _trace(start, end):
-#             for cell in cells:
-#                 yield cell
+    def test_find_destination_dest(self):
+        """Test find_destination method when dest is found and target is None.
+        """
+        start, end = Point(263, 600), Point(0, 400)
 
-#         def scan_bubbles(row, col):
-#             for _ in range(6):
-#                 yield mock.MagicMock(bubble=None)
+        def _trace(start, end):
+            for row, col in [(5, 3), (4, 2), (3, 1), (2, 0)]:
+                yield mock.MagicMock(row=row, col=col, bubble=None)
 
-#         with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
-#                 mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
-#                 mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
-#             mock_trace.return_value = _trace(start, end)
-#             mock_scan_bubble.return_value = scan_bubbles(4, 2)
-#             mock_helper_find_destination.return_value = changed_dest
-#             dest, target = self.shooter.find_destination(start, end)
-#             self.assertEqual((dest, target), (changed_dest, mock_target))
-#             mock_helper_find_destination.assert_called_once_with(mock_target, mock_dest)
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest.row, dest.col, target), (2, 0, None))
 
-#     def test_find_destination_dest_not_changed(self):
-#         """Test find_destination method when dest is not changed by _find_destination.
-#         """
-#         changed_dest = mock.MagicMock()
-#         cells = [
-#             mock.MagicMock(row=5, col=3, bubble=None),
-#             mock.MagicMock(row=4, col=2, bubble=None),
-#             mock.MagicMock(row=2, col=0, bubble=mock.MagicMock())]
-#         start, end = Point(263, 600), Point(0, 400)
-#         mock_dest, mock_target = cells[-2:]
+    def test_find_destination_dest_changed(self):
+        """Test find_destination method when dest is changed by _find_destination
+        """
+        changed_dest = object()
+        cells = [self.get_cells(r, c, bubble)
+                 for r, c, bubble in ((5, 3, None), (4, 2, None), (2, 0, object()))]
+        start, end = Point(263, 600), Point(0, 400)
+        mock_dest, mock_target = cells[-2:]
 
-#         def _trace(start, end):
-#             for cell in cells:
-#                 yield cell
+        def _trace(start, end):
+            for cell in cells:
+                yield cell
 
-#         def scan_bubbles(row, col):
-#             for i in range(6):
-#                 if i == 3:
-#                     yield mock.MagicMock(bubble=mock.MagicMock())
-#                 else:
-#                     yield mock.MagicMock(bubble=None)
+        def scan_bubbles(row, col):
+            for _ in range(6):
+                yield mock.MagicMock(bubble=None)
 
-#         with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
-#                 mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
-#                 mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
-#             mock_trace.return_value = _trace(start, end)
-#             mock_scan_bubble.return_value = scan_bubbles(4, 2)
-#             mock_helper_find_destination.return_value = changed_dest
-#             dest, target = self.shooter.find_destination(start, end)
-#             self.assertEqual((dest, target), (mock_dest, mock_target))
-#             mock_helper_find_destination.assert_not_called()
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
+                mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
+                mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
+            mock_trace.return_value = _trace(start, end)
+            mock_scan_bubble.return_value = scan_bubbles(4, 2)
+            mock_helper_find_destination.return_value = changed_dest
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (changed_dest, mock_target))
+            mock_helper_find_destination.assert_called_once_with(mock_target, mock_dest)
 
-#     def test_find_destination_dest_trace_no_cell(self):
-#         """Test find_destination method when _trace yield no cells.
-#         """
-#         start, end = Point(263, 600), Point(0, 400)
+    def test_find_destination_dest_not_changed(self):
+        """Test find_destination method when dest is not changed by _find_destination.
+        """
+        cells = [self.get_cells(r, c, bubble)
+                 for r, c, bubble in ((5, 3, None), (4, 2, None), (2, 0, object()))]
+        start, end = Point(263, 600), Point(0, 400)
+        mock_dest, mock_target = cells[-2:]
 
-#         def _trace(start, end):
-#             for i in range(3):
-#                 if i > 3:
-#                     yield mock.MagicMock()
+        def _trace(start, end):
+            for cell in cells:
+                yield cell
 
-#         with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
-#             mock_trace.return_value = _trace(start, end)
-#             dest, target = self.shooter.find_destination(start, end)
-#             self.assertEqual((dest, target), (None, None))
+        def scan_bubbles(row, col):
+            for i in range(6):
+                if i == 3:
+                    yield mock.MagicMock(bubble=mock.MagicMock())
+                else:
+                    yield mock.MagicMock(bubble=None)
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace, \
+                mock.patch('pybubble_shooter.Shooter.scan_bubbles') as mock_scan_bubble, \
+                mock.patch('pybubble_shooter.Shooter._find_destination') as mock_helper_find_destination:
+            mock_trace.return_value = _trace(start, end)
+            mock_scan_bubble.return_value = scan_bubbles(4, 2)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (mock_dest, mock_target))
+            mock_helper_find_destination.assert_not_called()
+
+    def test_find_destination_dest_trace_no_cell(self):
+        """Test find_destination method when _trace yield no cells.
+        """
+        start, end = Point(263, 600), Point(0, 400)
+
+        def _trace(start, end):
+            for i in range(0):
+                yield mock.MagicMock()
+
+        with mock.patch('pybubble_shooter.Shooter._trace') as mock_trace:
+            mock_trace.return_value = _trace(start, end)
+            dest, target = self.shooter.find_destination(start, end)
+            self.assertEqual((dest, target), (None, None))
 
 
-# class ChangeBubblesTestCase(ShooterBasicTest):
-#     """tests for change_bubbles
-#     """
+class ChangeBubblesTestCase(ShooterBasicTest):
+    """tests for change_bubbles
+    """
 
-#     def create_cell(self, row, col, bubble):
-#         return mock.create_autospec(
-#             spec=Cell, spec_set=True, instance=True, row=row, col=col, bubble=bubble)
+    def test_delete_bubbles(self):
+        """Test delete_bubbles method.
+        """
+        mock_bubble = mock.MagicMock()
+        mock_bubble.kill.return_value = None
+        cells = [[Cell(r, c) for c in range(5)] for r in range(5)]
 
-#     def test_delete_bubbles(self):
-#         """Test delete_bubbles method.
-#         """
-#         mock_bubble = mock.MagicMock()
-#         mock_bubble.kill.return_value = None
-#         cells = [[Cell(r, c) for c in range(5)] for r in range(5)]
-#         for row in cells:
-#             for cell in row:
-#                 cell.bubble = mock_bubble
-#         with mock.patch.object(self.shooter, 'cells', cells):
-#             self.shooter.delete_bubbles()
+        for row in cells:
+            for cell in row:
+                cell.bubble = mock_bubble
 
-#         self.assertEqual(mock_bubble.kill.call_count, 25)
-#         self.assertTrue(not any(cell.bubble for row in cells for cell in row))
+        with mock.patch.object(self.shooter, 'cells', cells):
+            self.shooter.delete_bubbles()
 
-#     def test_increase_bubbles(self):
-#         """Test increase_bubbles method.
-#         """
-#         cells = [[self.create_cell(r, c, object() if r < 3 else None) for c in range(COLS)] for r in range(ROWS)]
+        self.assertEqual(mock_bubble.kill.call_count, 25)
+        self.assertTrue(not any(cell.bubble for row in cells for cell in row))
 
-#         with mock.patch('pybubble_shooter.Shooter.create_bubbles') as mock_create_bubbles, \
-#                 mock.patch.object(self.shooter, 'cells', cells):
-#             self.shooter.increase_bubbles(3)
-#             for i, row in enumerate(cells):
-#                 for j, mock_cell in enumerate(row):
-#                     with self.subTest():
-#                         if i < 3:
-#                             mock_cell.move_bubble.assert_called_once_with(cells[i + 3][j])
-#                         else:
-#                             mock_cell.move_bubble.assert_not_called()
-#             mock_create_bubbles.assert_called_once_with(3)
+    def test_increase_bubbles(self):
+        """Test increase_bubbles method.
+        """
+        cells = [[self.get_cells(r, c, object() if r < 3 else None)
+                  for c in range(COLS)] for r in range(ROWS)]
 
-    # @mock.patch('pybubble_shooter.Shooter.charge')
-    # @mock.patch('pybubble_shooter.Shooter.delete_bubbles')
-    # @mock.patch('pybubble_shooter.Shooter.create_bubbles')
-    # @mock.patch('pybubble_shooter.Shooter.increase_bubbles')
-    # def test_colors_count_more_than_one(self, mock_incerase_bubbles, mock_create_bubbles,
-    #                                     mock_delete_bubbles, mock_charge):
-    #     with mock.patch.object()
-        
+        with mock.patch('pybubble_shooter.Shooter.create_bubbles') as mock_create_bubbles, \
+                mock.patch.object(self.shooter, 'cells', cells):
+            self.shooter.increase_bubbles(3)
+
+            for i, row in enumerate(cells):
+                for j, mock_cell in enumerate(row):
+                    with self.subTest():
+                        if i < 3:
+                            mock_cell.move_bubble.assert_called_once_with(cells[i + 3][j])
+                        else:
+                            mock_cell.move_bubble.assert_not_called()
+            mock_create_bubbles.assert_called_once_with(3)
+
+    @mock.patch('pybubble_shooter.Shooter.charge')
+    @mock.patch('pybubble_shooter.Shooter.delete_bubbles')
+    @mock.patch('pybubble_shooter.Shooter.create_bubbles')
+    @mock.patch('pybubble_shooter.Shooter.increase_bubbles')
+    def test_colors_count_more_than_two(self, mock_incerase_bubbles, mock_create_bubbles,
+                                        mock_delete_bubbles, mock_charge):
+        """Test change_bubbles method when colors_count is more than 2.
+        """
+        next_bullet = BUBBLES[0]
+
+        with mock.patch.object(self.shooter, 'next_bullet', next_bullet):
+            self.shooter.change_bubbles()
+            self.assertEqual(self.shooter.colors_count, 5)
+            self.assertEqual(len(self.shooter.bubbles), 5)
+            self.assertEqual(self.shooter.next_bullet, None)
+            mock_charge.assert_called_once()
+            mock_incerase_bubbles.assert_called_once_with(10)
+            mock_delete_bubbles.assert_not_called()
+            mock_create_bubbles.assert_not_called()
+
+    @mock.patch('pybubble_shooter.Shooter.charge')
+    @mock.patch('pybubble_shooter.Shooter.delete_bubbles')
+    @mock.patch('pybubble_shooter.Shooter.create_bubbles')
+    @mock.patch('pybubble_shooter.Shooter.increase_bubbles')
+    def test_colors_count_less_than_two(self, mock_incerase_bubbles, mock_create_bubbles,
+                                        mock_delete_bubbles, mock_charge):
+        """Test change_bubbles method when colors_count is less than 2.
+        """
+        next_bullet = BUBBLES[0]
+
+        with mock.patch.object(self.shooter, 'next_bullet', next_bullet), \
+                mock.patch.object(self.shooter, 'colors_count', 2):
+            self.shooter.change_bubbles()
+            self.assertEqual(self.shooter.colors_count, 1)
+            self.assertEqual(len(self.shooter.bubbles), 1)
+            self.assertEqual(self.shooter.next_bullet, None)
+            mock_charge.assert_called_once()
+            mock_incerase_bubbles.assert_not_called()
+            mock_delete_bubbles.assert_called_once()
+            mock_create_bubbles.assert_called_once_with(10)
+
+
+class SimulationMethodsTestCase(ShooterBasicTest):
+    """tests for simulation methods
+    """
+
+    @mock.patch('pybubble_shooter.Shooter.find_destination')
+    @mock.patch('pybubble_shooter.Shooter.find_cross_point')
+    def test_simulate_course(self, mock_find_cross_point, mock_find_destination):
+        start, end = Point(250, 600), Point(150, 400)
+        dest = self.get_cell()
+        target = object()
+        cross_point = Point(150, 450)
+
+        tests = [
+            dict(args=(start, end, False), find_dest=(dest, target), cross_point=cross_point, expect=(True, Line(start, cross_point))),
+            dict(args=(start, end, True), find_dest=(dest, target), cross_point=None, expect=(True, Line(start, dest.center))),
+            dict(args=(start, end, True), find_dest=(dest, None), cross_point=cross_point, expect=(True, Line(start, cross_point))),
+            dict(args=(start, end, False), find_dest=(dest, None), cross_point=None, expect=(False, Line(start, end))),
+            dict(args=(start, end, False), find_dest=(None, target), expect=(True, None)),
+            dict(args=(start, end, True), find_dest=(None, target), expect=(True, None)),
+            dict(args=(start, end, True), find_dest=(None, None), expect=(True, None))
+        ]
+        for test in tests:
+            with self.subTest(test):
+                mock_find_destination.return_value = test['find_dest']
+                if 'cross_point' in test:
+                    mock_find_cross_point.return_value = test['cross_point']
+                result = self.shooter._simulate_course(*test['args'])
+                self.assertEqual(result, test['expect'])
 
 
 if __name__ == '__main__':

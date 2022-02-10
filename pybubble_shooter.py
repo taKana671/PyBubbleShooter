@@ -348,15 +348,16 @@ class Shooter:
 
             if self.status == Status.READY:
                 count = self.count_bubbles()
-                if count == 0:
-                    self.status = Status.WIN
 
-                if count > 0 and self.bullet.status == Status.STAY:
-                    if count <= 20:
-                        self.change_bubbles(count)
-                    if self.is_increase:
-                        self.increase_bubbles(4)
-                        self.is_increase = False
+                if not count:
+                    self.status = Status.WIN
+                else:
+                    if self.bullet.status == Status.STAY:
+                        if count <= 20:
+                            self.change_bubbles()
+                        if self.is_increase:
+                            self.increase_bubbles(4)
+                            self.is_increase = False
 
                 if any(cell.bubble for cell in self.cells[-1]):
                     self.status = Status.GAMEOVER
@@ -591,13 +592,12 @@ class Shooter:
             for cell in cells:
                 cell.delete_bubble()
 
-    def change_bubbles(self, count):
+    def change_bubbles(self):
         if self.colors_count > 1:
             self.colors_count -= 1
         self.bubbles = random.sample(BUBBLES, self.colors_count)
         self.next_bullet = None
         self.charge()
-        self.status = Status.READY
 
         if len(self.bubbles) <= 2:
             self.delete_bubbles()
