@@ -143,8 +143,7 @@ class CellTestCase(TestCase):
         """Test for delete_bubble
         """
         mock_bubble = mock.MagicMock()
-        mock_kill = mock.MagicMock(return_value=None)
-        mock_bubble.kill = mock_kill
+        mock_bubble.kill.return_value = None
 
         cell = Cell(3, 5)
         with mock.patch.object(cell, 'bubble', mock_bubble):

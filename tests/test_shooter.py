@@ -7,7 +7,7 @@ from unittest import TestCase, main, mock
 
 
 from pybubble_shooter import (ImageFiles, SoundFiles, Score, Shooter, Point, Line,
-    ROWS, COLS, Cell, BUBBLES)
+    ROWS, COLS, Cell, BUBBLES, Status)
 
 
 class ShooterBasicTest(TestCase):
@@ -538,6 +538,8 @@ class SimulationMethodsTestCase(ShooterBasicTest):
     @mock.patch('pybubble_shooter.Shooter.find_destination')
     @mock.patch('pybubble_shooter.Shooter.find_cross_point')
     def test_simulate_course(self, mock_find_cross_point, mock_find_destination):
+        """Test the value that _simulate_course method returns.
+        """
         start, end = Point(250, 600), Point(150, 400)
         dest = self.get_cell()
         target = object()
@@ -559,6 +561,300 @@ class SimulationMethodsTestCase(ShooterBasicTest):
                     mock_find_cross_point.return_value = test['cross_point']
                 result = self.shooter._simulate_course(*test['args'])
                 self.assertEqual(result, test['expect'])
+
+    @mock.patch('pybubble_shooter.Shooter._simulate_course')
+    @mock.patch('pybubble_shooter.Shooter.calculate_bottom')
+    @mock.patch('pybubble_shooter.Shooter.calculate_height')
+    def test_simulate_bounce_course(self, mock_calc_height, mock_calc_bottom, mock_simulate_course):
+        """Test the number of lines that _simulate_bounce_course method recursively yields.
+        """
+        line = Line(Point(1, 1), Point(2, 2))
+        start = Point(0, 400)
+
+        tests = [
+            dict(args=(100, start, False, True), calc_height=[300], simu_course=[(True, line)], expect=[line]),
+            dict(args=(100, start, False, True), calc_height=[300], simu_course=[(True, None)], expect=[]),
+            dict(args=(100, start, False, True), calc_height=[800], simu_course=[(True, line)], expect=[line]),
+            dict(args=(100, start, False, True), calc_height=[800, 200], calc_bottom=[300], simu_course=[(False, line), (True, line)], expect=[line] * 2),
+            dict(args=(100, start, False, True), calc_height=[800, 600, 200], calc_bottom=[300, 150], simu_course=[(False, line), (False, line), (True, line)], expect=[line] * 3),
+            dict(args=(80, start, False, False), calc_height=[200], simu_course=[(False, line)], expect=[line]),
+            dict(args=(80, start, False, False), calc_height=[200], simu_course=[(True, None)], expect=[]),
+            dict(args=(80, start, False, False), calc_height=[600], calc_bottom=[300], simu_course=[(True, line)], expect=[line]),
+            dict(args=(80, start, False, False), calc_height=[600, 200], calc_bottom=[300], simu_course=[(False, line), (True, line)], expect=[line] * 2),
+            dict(args=(80, start, False, False), calc_height=[600, 700, 600, 200], calc_bottom=[300, 200, 200], simu_course=[(False, line), (False, line), (False, line), (True, line)], expect=[line] * 4),
+        ]
+
+        for test in tests:
+            with self.subTest(test):
+                mock_calc_height.side_effect = test['calc_height']
+                mock_simulate_course.side_effect = test['simu_course']
+                if 'calc_bottom' in test:
+                    mock_calc_bottom.side_effect = test['calc_bottom']
+
+                result = [line for line in self.shooter._simulate_bounce_course(*test['args'])]
+                self.assertEqual(result, test['expect'])
+
+    def test_simulate_shoot_top(self):
+        """Test the number of lines that simulate_shoot_top method yields.
+        """
+        start, end = Point(1, 1), Point(2, 2)
+        line = Line(Point(100, 100), Point(200, 200))
+        tests = [
+            [(True, line), [line]],
+            [(True, None), []],
+        ]
+
+        with mock.patch('pybubble_shooter.Shooter._simulate_course') as mock_simulate_course:
+            for return_value, expect in tests:
+                with self.subTest():
+                    mock_simulate_course.return_value = return_value
+                    result = [line for line in self.shooter.simulate_shoot_top(start, end)]
+                    self.assertEqual(result, expect)
+
+    def test_simulate_shoot_left(self):
+        """Test the number of lines that simulate_shoot_left method yields.
+        """
+        start, end = Point(1, 1), Point(2, 2)
+        line = Line(Point(100, 100), Point(200, 200))
+
+        def _simulate_bounce_course():
+            for _ in range(2):
+                yield line
+
+        tests = [
+            [(True, line), [line]],
+            [(True, None), []],
+            [(False, line), [line] * 3],
+        ]
+
+        with mock.patch('pybubble_shooter.Shooter._simulate_course') as mock_simulate_course, \
+                mock.patch('pybubble_shooter.Shooter._simulate_bounce_course') as mock_simulate_bounce_course:
+            for i, (return_value, expect) in enumerate(tests):
+                with self.subTest():
+                    mock_simulate_course.return_value = return_value
+                    mock_simulate_bounce_course.return_value = _simulate_bounce_course()
+                    result = [line for line in self.shooter.simulate_shoot_left(start, end)]
+                    self.assertEqual(result, expect)
+
+    def test_simulate_shoot_right(self):
+        """Test the number of lines that simulate_shoot_right method yields.
+        """
+        start, end = Point(1, 1), Point(2, 2)
+        line = Line(Point(100, 100), Point(200, 200))
+
+        def _simulate_bounce_course():
+            for _ in range(2):
+                yield line
+
+        tests = [
+            [(True, line), [line]],
+            [(True, None), []],
+            [(False, line), [line] * 3],
+        ]
+
+        with mock.patch('pybubble_shooter.Shooter._simulate_course') as mock_simulate_course, \
+                mock.patch('pybubble_shooter.Shooter._simulate_bounce_course') as mock_simulate_bounce_course:
+            for i, (return_value, expect) in enumerate(tests):
+                with self.subTest():
+                    mock_simulate_course.return_value = return_value
+                    mock_simulate_bounce_course.return_value = _simulate_bounce_course()
+                    result = [line for line in self.shooter.simulate_shoot_right(start, end)]
+                    self.assertEqual(result, expect)
+
+
+class UpdateMethodsTestCase(ShooterBasicTest):
+    """tests for update method
+    """
+    def setUp(self):
+        super().setUp()
+        self.mock_draw_setting = mock.patch('pybubble_shooter.Shooter.draw_setting').start()
+        self.mock_change_bubbles = mock.patch('pybubble_shooter.Shooter.change_bubbles').start()
+        self.mock_increase_bubbles = mock.patch('pybubble_shooter.Shooter.increase_bubbles').start()
+        self.mock_calc_height = mock.patch('pybubble_shooter.Shooter.calculate_height').start()
+        self.mock_simulate_shoot_right = mock.patch('pybubble_shooter.Shooter.simulate_shoot_right').start()
+        self.mock_simulate_shoot_left = mock.patch('pybubble_shooter.Shooter.simulate_shoot_left').start()
+        self.mock_simulate_shoot_top = mock.patch('pybubble_shooter.Shooter.simulate_shoot_top').start()
+        self.mock_draw_line = mock.patch('pybubble_shooter.pygame.draw.line').start()
+        self.mock_charge = mock.patch('pybubble_shooter.Shooter.charge').start()
+
+    def test_quit_game_win(self):
+        """Test quit_game method when status is WIN.
+        """
+        self.shooter.droppings_group.sprites.return_value = []
+
+        with mock.patch.object(self.shooter, 'status', Status.WIN), \
+                mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
+            self.shooter.quit_game()
+            mock_set_timer.assert_called_once()
+            self.shooter.fanfare.play.assert_called_once()
+            self.assertEqual(self.shooter.game, Status.WIN)
+
+    def test_quit_game_gameover(self):
+        """Test quit_game method when status is GAMEOVER.
+        """
+        self.shooter.droppings_group.sprites.return_value = []
+
+        with mock.patch.object(self.shooter, 'status', Status.GAMEOVER), \
+                mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
+            self.shooter.quit_game()
+            mock_set_timer.assert_not_called()
+            self.shooter.fanfare.play.assert_not_called()
+            self.assertEqual(self.shooter.game, Status.GAMEOVER)
+
+    def test_quit_game_dropping_group(self):
+        """Test quit_game when dropping_group is not empty.
+        """
+        self.shooter.droppings_group.sprites.return_value = [object()]
+
+        with mock.patch.object(self.shooter, 'status', Status.WIN), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY), \
+                mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
+            self.shooter.quit_game()
+            mock_set_timer.assert_not_called()
+            self.shooter.fanfare.play.assert_not_called()
+            self.assertEqual(self.shooter.game, Status.PLAY)
+
+    def test_count_bubbles(self):
+        """Test count_bubbles method.
+        """
+        bubble = object()
+        cells = [[self.get_cells(r, c, bubble if r == 0 else None)
+                  for c in range(5)] for r in range(5)]
+
+        with mock.patch.object(self.shooter, 'cells', cells):
+            result = self.shooter.count_bubbles()
+            self.assertEqual(result, 5)
+
+    @mock.patch('pybubble_shooter.Shooter.quit_game')
+    def test_update_win(self, mock_quit_game):
+        """Test update method when shooter.status is changed to WIN and
+           launcher is turned to the right.
+        """
+        def simulate_shoot_right():
+            for _ in range(2):
+                yield Line(Point(1, 1), Point(2, 2))
+
+        dest = self.get_cell()
+        cells = [[self.get_cells(r, c, None) for c in range(COLS)] for r in range(ROWS)]
+        self.mock_simulate_shoot_right.return_value = simulate_shoot_right()
+        self.mock_calc_height.return_value = 200
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 30), \
+                mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch.object(self.shooter, 'dest', dest), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY):
+            self.shooter.update()
+            self.mock_draw_setting.assert_called_once()
+            self.assertEqual(self.shooter.status, Status.WIN)
+            mock_quit_game.assert_called_once()
+            self.assertEqual(self.mock_draw_line.call_count, 2)
+            self.mock_charge.assert_not_called()
+            self.mock_simulate_shoot_left.assert_not_called()
+            self.mock_simulate_shoot_top.assert_not_called()
+
+    @mock.patch('pybubble_shooter.Shooter.quit_game')
+    def test_update_gameover(self, mock_quit_game):
+        """Test update when shooter.status is changed to GAMEOVER
+           and launcher is turned to the left.
+        """
+        def simulate_shoot_left():
+            for _ in range(2):
+                yield Line(Point(1, 1), Point(2, 2))
+
+        dest = self.get_cell()
+        cells = [[self.get_cells(r, c, object()) for c in range(COLS)] for r in range(ROWS)]
+        self.mock_simulate_shoot_left.return_value = simulate_shoot_left()
+        self.mock_calc_height.return_value = 200
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 150), \
+                mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch.object(self.shooter, 'dest', dest), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY):
+            self.shooter.update()
+            self.mock_draw_setting.assert_called_once()
+            self.assertEqual(self.shooter.status, Status.GAMEOVER)
+            mock_quit_game.assert_called_once()
+            self.assertEqual(self.mock_draw_line.call_count, 2)
+            self.mock_simulate_shoot_right.assert_not_called()
+            self.mock_simulate_shoot_top.assert_not_called()
+            self.mock_charge.assert_not_called()
+
+    def test_update_less_than_20_bubbles(self):
+        """Test update when the number of bubbles is less than 20 and
+           launcher is turned to the top.
+        """
+        def simulate_shoot_top():
+            yield Line(Point(1, 1), Point(2, 2))
+
+        dest = self.get_cell()
+        cells = [[self.get_cells(r, c, object() if r == 0 else None)
+                  for c in range(COLS)] for r in range(ROWS)]
+        self.mock_simulate_shoot_top.return_value = simulate_shoot_top()
+        self.mock_calc_height.return_value = 200
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 80), \
+                mock.patch.object(self.shooter.bullet, 'status', Status.STAY, create=True), \
+                mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch.object(self.shooter, 'dest', dest), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY):
+            self.shooter.update()
+            self.assertEqual(self.shooter.status, Status.READY)
+            self.mock_draw_line.assert_called_once()
+            self.mock_simulate_shoot_left.assert_not_called()
+            self.mock_simulate_shoot_right.assert_not_called()
+            self.mock_charge.assert_not_called()
+            self.mock_change_bubbles.assert_called_once()
+            self.mock_increase_bubbles.assert_not_called()
+
+    def test_update_more_than_20_bubbles(self):
+        """Test update when the number of bubbles is more than 20 and
+           is_increase is set to True and dest is None.
+        """
+        def simulate_shoot_top():
+            yield Line(Point(1, 1), Point(2, 2))
+
+        cells = [[self.get_cells(r, c, object() if r <= 3 else None)
+                  for c in range(COLS)] for r in range(ROWS)]
+        self.mock_simulate_shoot_top.return_value = simulate_shoot_top()
+        self.mock_calc_height.return_value = 200
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 80), \
+                mock.patch.object(self.shooter.bullet, 'status', Status.STAY, create=True), \
+                mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch.object(self.shooter, 'is_increase', True), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY):
+            self.shooter.update()
+            self.assertEqual(self.shooter.status, Status.READY)
+            self.mock_draw_line.assert_not_called()
+            self.mock_charge.assert_not_called()
+            self.mock_change_bubbles.assert_not_called()
+            self.mock_increase_bubbles.assert_called_once()
+            self.assertEqual(self.shooter.is_increase, False)
+
+    def test_update_charge(self):
+        """Test update method when status is CHARGE.
+        """
+        with mock.patch.object(self.shooter, 'game', Status.PLAY), \
+                mock.patch.object(self.shooter, 'status', Status.CHARGE):
+            self.shooter.update()
+            self.mock_charge.assert_called_once()
+            self.assertEqual(self.shooter.status, Status.READY)
+
+    def test_update_bullet_status_shot(self):
+        """Test update when bullet_status is SHOT.
+        """
+        cells = [[self.get_cells(r, c, object() if r == 0 else None)
+                  for c in range(COLS)] for r in range(ROWS)]
+
+        with mock.patch.object(self.shooter.bullet, 'status', Status.SHOT, create=True), \
+                mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch.object(self.shooter, 'is_increase', True), \
+                mock.patch.object(self.shooter, 'game', Status.PLAY):
+            self.shooter.update()
+            self.mock_charge.assert_not_called()
+            self.mock_change_bubbles.assert_not_called()
+            self.mock_increase_bubbles.assert_not_called()
+            self.assertEqual(self.shooter.is_increase, True)
 
 
 if __name__ == '__main__':
