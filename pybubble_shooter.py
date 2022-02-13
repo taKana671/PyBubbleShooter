@@ -687,8 +687,6 @@ class BaseBubble(pygame.sprite.Sprite):
                 if self.rect.right >= bar.left > self.rect.left:
                     self.rect.right = bar.left
                     self.speed_x = -self.speed_x
-                if bar.left > self.rect.left and bar.right < self.rect.right:
-                    self.rect.bottom = bar.top + 10
 
             if self.rect.bottom > WINDOW.height:
                 self.sound_pop.play()
