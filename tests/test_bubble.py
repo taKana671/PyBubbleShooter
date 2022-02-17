@@ -200,19 +200,18 @@ class BulletTestCase(BasicTest):
             mock.call(Point(263, 600), Point(0, 500), mock_func),
             mock.call(Point(0, 500), Point(106, 75), mock_func)
         ]
-        with mock.patch('pybubble_shooter.Bullet.select_func', return_value=mock_func) as mock_select_func, \
-                mock.patch('pybubble_shooter.Bullet.decide_positions') as mock_decide_positions:
+        with mock.patch.object(Bullet, 'select_func', return_value=mock_func) as mock_select_func, \
+                mock.patch.object(Bullet, 'decide_positions') as mock_decide_positions:
             _ = [pt for pt in self.bullet.simulate_course()]
             self.assertEqual(mock_select_func.call_args_list, expect_select_func_args)
             self.assertEqual(mock_decide_positions.call_args_list, expect_decide_positions_args)
 
-    @mock.patch('pybubble_shooter.Bullet.drop_floating_bubbles')
-    @mock.patch('pybubble_shooter.Bullet.drop_same_color_bubbles')
+    @mock.patch.object(Bullet, 'drop_floating_bubbles')
+    @mock.patch.object(Bullet, 'drop_same_color_bubbles')
     def test_bullet_update_left(self, mock_drop_color, mock_floating):
         """Test update method when bullet.rect.left < WINDOW.left.
         """
-        cell = self.get_cell()
-        self.shooter.configure_mock(**dict(dest=cell, status=Status.SHOT))
+        self.shooter.configure_mock(**dict(dest=self.get_cell(), status=Status.SHOT))
         course = [Point(1, 1), Point(2, 2), Point(3, 3)]
         self.reset_rect(self.bullet, -10, 20, 200, 230)
 
@@ -226,13 +225,12 @@ class BulletTestCase(BasicTest):
             mock_drop_color.assert_not_called()
             mock_floating.assert_not_called()
 
-    @mock.patch('pybubble_shooter.Bullet.drop_floating_bubbles')
-    @mock.patch('pybubble_shooter.Bullet.drop_same_color_bubbles')
+    @mock.patch.object(Bullet, 'drop_floating_bubbles')
+    @mock.patch.object(Bullet, 'drop_same_color_bubbles')
     def test_bullet_update_right(self, mock_drop_color, mock_floating):
         """Test update method when bullet.rect.right > WINDOW.right.
         """
-        cell = self.get_cell()
-        self.shooter.configure_mock(**dict(dest=cell, status=Status.SHOT))
+        self.shooter.configure_mock(**dict(dest=self.get_cell(), status=Status.SHOT))
         course = [Point(1, 1), Point(2, 2), Point(3, 3)]
         self.reset_rect(self.bullet, 506, 536, 200, 230)
 
@@ -247,8 +245,8 @@ class BulletTestCase(BasicTest):
             mock_drop_color.assert_not_called()
             mock_floating.assert_not_called()
 
-    @mock.patch('pybubble_shooter.Bullet.drop_floating_bubbles')
-    @mock.patch('pybubble_shooter.Bullet.drop_same_color_bubbles')
+    @mock.patch.object(Bullet, 'drop_floating_bubbles')
+    @mock.patch.object(Bullet, 'drop_same_color_bubbles')
     def test_bullet_update_no_same_color_bubbles(self, mock_drop_color, mock_floating):
         """Test update method when the same color bubbles are not found.
         """
@@ -270,7 +268,7 @@ class BulletTestCase(BasicTest):
             self.assertEqual(self.bullet.shooter.status, Status.CHARGE)
             self.assertEqual(self.bullet.status, Status.STAY)
 
-    @mock.patch('pybubble_shooter.BaseBubble.update')
+    @mock.patch.object(BaseBubble, 'update')
     def test_bullet_update_satus_move(self, mock_super_update):
         """Test update method when bullet.status is MOVE.
         """
@@ -296,8 +294,8 @@ class BulletTestCase(BasicTest):
         """Test that drop_same_color_bubbles returns False
            when the same color bubbles are less than three.
         """
-        red_bubble = mock.create_autospec(spec=Bubble, instance=True, color='red')
-        blue_bubble = mock.create_autospec(spec=Bubble, instance=True, color='blue')
+        red_bubble = mock.MagicMock(color='red')
+        blue_bubble = mock.MagicMock(color='blue')
         cell_1 = self.get_cell(red_bubble)
         cell_2 = self.get_cell(blue_bubble)
 
@@ -317,7 +315,7 @@ class BulletTestCase(BasicTest):
         """Test that drop_same_color_bubbles returns False
            when the same color bubbles are more than three.
         """
-        red_bubble = mock.create_autospec(spec=Bubble, instance=True, color='red')
+        red_bubble = mock.MagicMock(color='red')
         cells = set(self.get_cell(red_bubble) for _ in range(5))
 
         def scan_bubbles():
@@ -332,27 +330,34 @@ class BulletTestCase(BasicTest):
             self.assertEqual(result, True)
             mock_drop_bubbles.assert_called_once_with(cells)
 
-    # def test_get_same_color(self):
-    #     """Test _get_same_color method.
-    #     """
-    #     cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
-    #     red_bubble = mock.create_autospec(spec=Bubble, instance=True, color='red')
-    #     blue_bubble = mock.create_autospec(spec=Bubble, instance=True, color='blue')
-    #     cells_with_red = [(8, 3), (8, 4), (8, 5), (7, 2), (7, 4), (7, 5)]
-    #     test_cell = Cell(9, 2)
-    #     test_cell.bubble = red_bubble
+    @mock.patch('pybubble_shooter.Shooter.initialize_game')
+    @mock.patch('pybubble_shooter.pygame.font.SysFont')
+    def test_get_same_color(self, mock_initialize, mock_font):
+        """Test _get_same_color method.
+        """
+        cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
+        red_bubble = mock.MagicMock(color='red')
+        blue_bubble = mock.MagicMock(color='blue')
+        cells_with_red = {(8, 3), (8, 4), (8, 5), (7, 2), (7, 4), (7, 5)}
 
-    #     for i, row in enumerate(cells):
-    #         for j, cell in enumerate(row):
-    #             if (i, j) in cells_with_red:
-    #                 cell.bubble = red_bubble
-    #             elif i <= 8:
-    #                 cell.bubble = blue_bubble
+        for i, row in enumerate(cells):
+            for j, cell in enumerate(row):
+                if (i, j) in cells_with_red:
+                    cell.bubble = red_bubble
+                elif i <= 8:
+                    cell.bubble = blue_bubble
 
-    #     self.shooter.cells = cells
-    #     result_set = set()
-    #     self.bullet._get_same_color(cell, result_set)
-    #     print(result_set)
+        shooter = Shooter(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        bullet = Bullet('test.png', 'red', shooter)
+        test_cell = Cell(9, 3)
+        test_cell.bubble = red_bubble
+
+        with mock.patch.object(shooter, 'cells', cells):
+            result_set = set()
+            bullet._get_same_color(test_cell, result_set)
+            self.assertEqual(len(result_set), len(cells_with_red))
+            self.assertEqual(
+                set((cell.row, cell.col) for cell in result_set), cells_with_red)
 
 
 if __name__ == '__main__':
