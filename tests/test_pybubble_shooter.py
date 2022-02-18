@@ -7,7 +7,7 @@ from unittest import TestCase, main, mock
 
 
 from pybubble_shooter import (ImageFiles, SoundFiles, round_up, round, Cell,
-    Point, Line)
+    Point, Line, Score)
 
 
 class FilesTestCase(TestCase):
@@ -149,6 +149,27 @@ class CellTestCase(TestCase):
         with mock.patch.object(cell, 'bubble', mock_bubble):
             cell.delete_bubble()
             self.assertEqual(cell.bubble, None)
+
+
+class ScoreTestCase(TestCase):
+    """Tests for Score
+    """
+    @mock.patch('pybubble_shooter.pygame.font.SysFont')
+    def test_add(self, mock_font):
+        """Test add method.
+        """
+        tests = [
+            (100, 50),  # (x, added score)
+            (118, 150),
+            (300, 400),
+            (400, 500),
+            (450, 550)
+        ]
+        score = Score(mock.MagicMock())
+        for x, expect in tests:
+            with self.subTest():
+                score.add(x)
+                self.assertEqual(score.score, expect)
 
 
 if __name__ == '__main__':

@@ -306,7 +306,7 @@ class BulletTestCase(BasicTest):
         self.shooter.dest = self.get_cell()
         self.shooter.scan_bubbles.return_value = scan_bubbles()
 
-        with mock.patch('pybubble_shooter.Bullet.drop_bubbles') as mock_drop_bubbles:
+        with mock.patch.object(Bullet, 'drop_bubbles') as mock_drop_bubbles:
             result = self.bullet.drop_same_color_bubbles()
             self.assertEqual(result, False)
             mock_drop_bubbles.assert_not_called()
@@ -325,7 +325,7 @@ class BulletTestCase(BasicTest):
         self.shooter.dest = self.get_cell()
         self.shooter.scan_bubbles.return_value = scan_bubbles()
 
-        with mock.patch('pybubble_shooter.Bullet.drop_bubbles') as mock_drop_bubbles:
+        with mock.patch.object(Bullet, 'drop_bubbles') as mock_drop_bubbles:
             result = self.bullet.drop_same_color_bubbles()
             self.assertEqual(result, True)
             mock_drop_bubbles.assert_called_once_with(cells)
@@ -336,21 +336,19 @@ class BulletTestCase(BasicTest):
         """Test _get_same_color method.
         """
         cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
-        red_bubble = mock.MagicMock(color='red')
-        blue_bubble = mock.MagicMock(color='blue')
         cells_with_red = {(8, 3), (8, 4), (8, 5), (7, 2), (7, 4), (7, 5)}
 
         for i, row in enumerate(cells):
             for j, cell in enumerate(row):
                 if (i, j) in cells_with_red:
-                    cell.bubble = red_bubble
+                    cell.bubble = mock.MagicMock(color='red')
                 elif i <= 8:
-                    cell.bubble = blue_bubble
+                    cell.bubble = mock.MagicMock(color='blue')
 
         shooter = Shooter(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
         bullet = Bullet('test.png', 'red', shooter)
         test_cell = Cell(9, 3)
-        test_cell.bubble = red_bubble
+        test_cell.bubble = mock.MagicMock(color='red')
 
         with mock.patch.object(shooter, 'cells', cells):
             result_set = set()
@@ -358,6 +356,76 @@ class BulletTestCase(BasicTest):
             self.assertEqual(len(result_set), len(cells_with_red))
             self.assertEqual(
                 set((cell.row, cell.col) for cell in result_set), cells_with_red)
+
+    @mock.patch('pybubble_shooter.Shooter.initialize_game')
+    @mock.patch('pybubble_shooter.pygame.font.SysFont')
+    def test_get_connected_no_floating(self, mock_initialize, mock_font):
+        """Test _get_floating method when there are no floating bubbles.
+        """
+        cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
+        cells_with_bubble = {(0, 3), (1, 2), (2, 3)}
+
+        for i, row in enumerate(cells):
+            for j, cell in enumerate(row):
+                if (i, j) in cells_with_bubble:
+                    cell.bubble = mock.MagicMock()
+
+        shooter = Shooter(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        bullet = Bullet('test.png', 'red', shooter)
+
+        with mock.patch.object(shooter, 'cells', cells):
+            result_set = set()
+            bullet._get_connected(Cell(0, 3), result_set)
+            self.assertEqual(len(result_set), len(cells_with_bubble))
+            self.assertEqual(
+                set((cell.row, cell.col) for cell in result_set), cells_with_bubble)
+
+    @mock.patch('pybubble_shooter.Shooter.initialize_game')
+    @mock.patch('pybubble_shooter.pygame.font.SysFont')
+    def test_get_connected_some_floating(self, mock_initialize, mock_font):
+        """Test _get_floating method when there are no floating bubbles.
+        """
+        cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
+        cells_with_bubble = {(0, 2), (0, 3), (1, 1), (1, 2), (2, 2), (3, 0)}
+
+        for i, row in enumerate(cells):
+            for j, cell in enumerate(row):
+                if (i, j) in cells_with_bubble:
+                    cell.bubble = mock.MagicMock()
+
+        shooter = Shooter(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        bullet = Bullet('test.png', 'red', shooter)
+
+        with mock.patch.object(shooter, 'cells', cells):
+            result_set = set()
+            bullet._get_connected(Cell(0, 3), result_set)
+            self.assertEqual(len(result_set), len(cells_with_bubble) - 1)
+            result_set = set((cell.row, cell.col) for cell in result_set)
+            expect = cells_with_bubble - {(3, 0)}
+            self.assertEqual(result_set, expect)
+
+    @mock.patch('pybubble_shooter.Shooter.initialize_game')
+    @mock.patch('pybubble_shooter.pygame.font.SysFont')
+    def test_drop_floating_bubbles(self, mock_initialize, mock_font):
+        """Test drop_floating_bubbles method.
+        """
+        cells = [[Cell(r, c) for c in range(COLS)] for r in range(ROWS)]
+        cells_with_bubble = {
+            (0, 2), (0, 3), (1, 1), (1, 2), (2, 2), (3, 0), (0, 6), (1, 5), (1, 6), (2, 6), (3, 9)}
+        expect = {cells[3][0], cells[3][9]}
+
+        for i, row in enumerate(cells):
+            for j, cell in enumerate(row):
+                if (i, j) in cells_with_bubble:
+                    cell.bubble = mock.MagicMock()
+
+        shooter = Shooter(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        bullet = Bullet('test.png', 'red', shooter)
+
+        with mock.patch.object(shooter, 'cells', cells), \
+                mock.patch.object(bullet, 'drop_bubbles') as mock_drop_bubbles:
+            bullet.drop_floating_bubbles()
+            mock_drop_bubbles.assert_called_once_with(expect)
 
 
 if __name__ == '__main__':
