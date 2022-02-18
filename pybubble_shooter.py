@@ -800,12 +800,12 @@ class Bullet(BaseBubble):
             return True
         return False
 
-    def _get_floating(self, cell, cells):
+    def _get_connected(self, cell, cells):
         for cell in self.shooter.scan_bubbles(cell.row, cell.col):
             if cell.bubble:
                 if cell not in cells:
                     cells.add(cell)
-                    self._get_floating(cell, cells)
+                    self._get_connected(cell, cells)
 
     def drop_floating_bubbles(self):
         """Get bubbles that are connected to the top to drop them.
@@ -813,7 +813,7 @@ class Bullet(BaseBubble):
         top = [cell for cell in self.shooter.cells[0] if cell.bubble]
         connected = set(top)
         for cell in top:
-            self._get_floating(cell, connected)
+            self._get_connected(cell, connected)
         bubbles = set(cell for cells in self.shooter.cells for cell in cells if cell.bubble)
         if diff := bubbles - connected:
             self.drop_bubbles(diff)
