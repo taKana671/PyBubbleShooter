@@ -4,10 +4,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from pathlib import Path
 from unittest import TestCase, main, mock
-
+from pygame.locals import QUIT, MOUSEBUTTONDOWN, KEYDOWN, K_RIGHT, K_LEFT, K_SPACE
 
 from pybubble_shooter import (ImageFiles, SoundFiles, round_up, round, Cell,
-    Point, Line, Score)
+    Point, Line, Score, Status)
+from pybubble_shooter import main as pybubble_main
 
 
 class FilesTestCase(TestCase):
@@ -170,6 +171,123 @@ class ScoreTestCase(TestCase):
             with self.subTest():
                 score.add(x)
                 self.assertEqual(score.score, expect)
+
+
+class MainTestCase(TestCase):
+    """Test for main function
+    """
+
+    def setUp(self):
+        patchers = [
+            mock.patch('pybubble_shooter.pygame.display.set_caption'),
+            mock.patch('pybubble_shooter.pygame.time'),
+            mock.patch('pybubble_shooter.pygame.key.set_repeat'),
+        ]
+        for patcher in patchers:
+            patcher.start()
+
+        mock_set_mode = mock.patch('pybubble_shooter.pygame.display.set_mode').start()
+        self.mock_screen = mock.MagicMock()
+        mock_set_mode.return_value = self.mock_screen
+        mock_Score = mock.patch("pybubble_shooter.Score").start()
+        self.mock_score = mock.MagicMock()
+        mock_Score.return_value = self.mock_score
+        mock_Shooter = mock.patch("pybubble_shooter.Shooter").start()
+        self.mock_shooter = mock.MagicMock()
+        mock_Shooter.return_value = self.mock_shooter
+        mock_StartGame = mock.patch("pybubble_shooter.StartGame").start()
+        self.mock_startgame = mock.MagicMock()
+        mock_StartGame.return_value = self.mock_startgame
+        mock_RetryGame = mock.patch("pybubble_shooter.RetryGame").start()
+        self.mock_retrygame = mock.MagicMock()
+        mock_RetryGame.return_value = self.mock_retrygame
+        self.mock_event_get = mock.patch("pybubble_shooter.pygame.event.get").start()
+
+        self.bubbles = mock.MagicMock()
+        self.droppings = mock.MagicMock()
+        self.start = mock.MagicMock()
+        self.retry = mock.MagicMock()
+        mock_renderupdate = mock.patch("pygame.sprite.RenderUpdates").start()
+        mock_renderupdate.side_effect = [self.bubbles, self.droppings, self.start, self.retry]
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def set_dummy_event(self, event_type):
+        def dummy_event_get():
+            yield mock.MagicMock(type=event_type)
+        self.mock_event_get.return_value = dummy_event_get()
+
+    def check_update_called(self, *mock_renders):
+        for mock_render in mock_renders:
+            with self.subTest():
+                mock_render.update.assert_called_once()
+
+    def check_draw_called(self, *mock_renders):
+        for mock_render in mock_renders:
+            with self.subTest():
+                mock_render.draw.assert_called_once_with(self.mock_screen)
+
+    def check_not_called(self, *methods):
+        for method in methods:
+            with self.subTest():
+                method.assert_not_called()
+
+    def test_games_tatus_start(self):
+        """Test that start screen is updated when shooter.game status is START.
+        """
+        self.set_dummy_event(QUIT)
+
+        with mock.patch.object(self.mock_shooter, 'game', Status.START, create=True):
+            with self.assertRaises(SystemExit):
+                pybubble_main()
+
+        self.check_update_called(self.mock_shooter, self.bubbles, self.start)
+        self.check_draw_called(self.bubbles, self.start)
+        self.check_not_called(
+            self.droppings.draw, self.mock_score.update, self.retry.update, self.retry.draw)
+
+    def test_game_status_play(self):
+        """Test that play screen and score are updated
+           when shooter.game status is PLAY.
+        """
+        self.set_dummy_event(QUIT)
+
+        with mock.patch.object(self.mock_shooter, 'game', Status.PLAY, create=True):
+            with self.assertRaises(SystemExit):
+                pybubble_main()
+
+        self.check_update_called(self.mock_shooter, self.bubbles, self.mock_score)
+        self.check_draw_called(self.bubbles, self.droppings)
+        self.check_not_called(self.start.update, self.start.draw, self.retry.update, self.retry.draw)
+
+    def test_game_status_gameover(self):
+        """Test that retry screen is updated when shooter.game status is gameover.
+        """
+        self.set_dummy_event(QUIT)
+
+        with mock.patch.object(self.mock_shooter, 'game', Status.GAMEOVER, create=True):
+            with self.assertRaises(SystemExit):
+                pybubble_main()
+
+        self.check_update_called(self.mock_shooter, self.bubbles, self.retry)
+        self.check_draw_called(self.bubbles, self.retry)
+        self.check_not_called(
+            self.start.update, self.start.draw, self.droppings.draw, self.mock_score.update)
+
+    def test_game_status_win(self):
+        """Test that retry screen is updated when shooter.game status is win.
+        """
+        self.set_dummy_event(QUIT)
+
+        with mock.patch.object(self.mock_shooter, 'game', Status.WIN, create=True):
+            with self.assertRaises(SystemExit):
+                pybubble_main()
+
+        self.check_update_called(self.mock_shooter, self.bubbles, self.retry)
+        self.check_draw_called(self.bubbles, self.retry)
+        self.check_not_called(
+            self.start.update, self.start.draw, self.droppings.draw, self.mock_score.update)
 
 
 if __name__ == '__main__':
