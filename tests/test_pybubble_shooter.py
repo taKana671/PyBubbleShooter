@@ -2,6 +2,8 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+import pygame
+
 from pathlib import Path
 from unittest import TestCase, main, mock
 from pygame.locals import QUIT, MOUSEBUTTONDOWN, KEYDOWN, K_RIGHT, K_LEFT, K_SPACE
@@ -213,9 +215,10 @@ class MainTestCase(TestCase):
     def tearDown(self):
         mock.patch.stopall()
 
-    def set_dummy_event(self, event_type):
+    def set_dummy_event(self, *events):
         def dummy_event_get():
-            yield mock.MagicMock(type=event_type)
+            for event in events:
+                yield mock.MagicMock(**event)
         self.mock_event_get.return_value = dummy_event_get()
 
     def check_update_called(self, *mock_renders):
@@ -233,14 +236,16 @@ class MainTestCase(TestCase):
             with self.subTest():
                 method.assert_not_called()
 
+    def run_main(self, status):
+        with mock.patch.object(self.mock_shooter, 'game', status, create=True):
+            with self.assertRaises(SystemExit):
+                pybubble_main()
+
     def test_games_tatus_start(self):
         """Test that start screen is updated when shooter.game status is START.
         """
-        self.set_dummy_event(QUIT)
-
-        with mock.patch.object(self.mock_shooter, 'game', Status.START, create=True):
-            with self.assertRaises(SystemExit):
-                pybubble_main()
+        self.set_dummy_event(dict(type=QUIT))
+        self.run_main(Status.START)
 
         self.check_update_called(self.mock_shooter, self.bubbles, self.start)
         self.check_draw_called(self.bubbles, self.start)
@@ -251,11 +256,8 @@ class MainTestCase(TestCase):
         """Test that play screen and score are updated
            when shooter.game status is PLAY.
         """
-        self.set_dummy_event(QUIT)
-
-        with mock.patch.object(self.mock_shooter, 'game', Status.PLAY, create=True):
-            with self.assertRaises(SystemExit):
-                pybubble_main()
+        self.set_dummy_event(dict(type=QUIT))
+        self.run_main(Status.PLAY)
 
         self.check_update_called(self.mock_shooter, self.bubbles, self.mock_score)
         self.check_draw_called(self.bubbles, self.droppings)
@@ -264,11 +266,8 @@ class MainTestCase(TestCase):
     def test_game_status_gameover(self):
         """Test that retry screen is updated when shooter.game status is gameover.
         """
-        self.set_dummy_event(QUIT)
-
-        with mock.patch.object(self.mock_shooter, 'game', Status.GAMEOVER, create=True):
-            with self.assertRaises(SystemExit):
-                pybubble_main()
+        self.set_dummy_event(dict(type=QUIT))
+        self.run_main(Status.GAMEOVER)
 
         self.check_update_called(self.mock_shooter, self.bubbles, self.retry)
         self.check_draw_called(self.bubbles, self.retry)
@@ -278,16 +277,107 @@ class MainTestCase(TestCase):
     def test_game_status_win(self):
         """Test that retry screen is updated when shooter.game status is win.
         """
-        self.set_dummy_event(QUIT)
-
-        with mock.patch.object(self.mock_shooter, 'game', Status.WIN, create=True):
-            with self.assertRaises(SystemExit):
-                pybubble_main()
+        self.set_dummy_event(dict(type=QUIT))
+        self.run_main(Status.WIN)
 
         self.check_update_called(self.mock_shooter, self.bubbles, self.retry)
         self.check_draw_called(self.bubbles, self.retry)
         self.check_not_called(
             self.start.update, self.start.draw, self.droppings.draw, self.mock_score.update)
+
+    def test_original_event_type(self):
+        """Test that Shooter.increase is called when shooter.game status
+           is PLAY and even.type is pygame.USEREVENT + 1.
+        """
+        self.set_dummy_event(
+            dict(type=pygame.USEREVENT + 1), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_shooter.increase.assert_called_once()
+
+    def test_event_type_kright(self):
+        """Test that Shooter.increase is called when shooter.game status
+           is PLAY and even.key is K_RIGHT.
+        """
+        self.set_dummy_event(
+            dict(type=KEYDOWN, key=K_RIGHT), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_shooter.move_right.assert_called_once()
+        self.check_not_called(self.mock_shooter.move_left, self.mock_shooter.shoot)
+
+    def test_event_type_kleft(self):
+        """Test that Shooter.increase is called when shooter.game status
+           is PLAY and even.key is K_RIGHT.
+        """
+        self.set_dummy_event(
+            dict(type=KEYDOWN, key=K_LEFT), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_shooter.move_left.assert_called_once()
+        self.check_not_called(self.mock_shooter.move_right, self.mock_shooter.shoot)
+
+    def test_event_type_kspace(self):
+        """Test that Shooter.increase is called when shooter.game status
+           is PLAY and even.key is K_SPACE.
+        """
+        self.set_dummy_event(
+            dict(type=KEYDOWN, key=K_SPACE), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_shooter.shoot.assert_called_once()
+        self.check_not_called(self.mock_shooter.move_right, self.mock_shooter.move_left)
+
+    def test_event_not_play(self):
+        """Test that Shooter method is not called
+           when shooter.game status is not PLAY.
+        """
+        self.set_dummy_event(
+            dict(type=pygame.USEREVENT + 1),
+            dict(type=KEYDOWN, key=K_SPACE),
+            dict(type=KEYDOWN, key=K_RIGHT),
+            dict(type=KEYDOWN, key=K_LEFT),
+            dict(type=QUIT))
+        self.run_main(Status.START)
+
+        self.check_not_called(
+            self.mock_shooter.move_right,
+            self.mock_shooter.move_left,
+            self.mock_shooter.shoot,
+            self.mock_shooter.increase)
+
+    def test_mouse_start(self):
+        """Test that game starts when event.type is MOUSEBUTTON
+           if game status is START.
+        """
+        self.set_dummy_event(
+            dict(type=MOUSEBUTTONDOWN, button=1, pos=(2, 3)), dict(type=QUIT))
+        self.run_main(Status.START)
+
+        self.mock_startgame.click.assert_called_once_with(2, 3)
+        self.mock_retrygame.click.assert_not_called()
+
+    def test_mouse_retry(self):
+        """Test that game restarts when event.type is MOUSEBUTTON
+           if game status is GAMEOVER or WIN.
+        """
+        self.set_dummy_event(
+            dict(type=MOUSEBUTTONDOWN, button=1, pos=(2, 3)), dict(type=QUIT))
+        self.run_main(Status.GAMEOVER)
+
+        self.mock_startgame.click.assert_not_called()
+        self.mock_retrygame.click.assert_called_once_with(2, 3)
+
+    def test_mouse_status_play(self):
+        """Test that game is not started when game status is PLAY
+           even if event.type is MOUSEBUTTON.
+        """
+        self.set_dummy_event(
+            dict(type=MOUSEBUTTONDOWN, button=1, pos=(2, 3)), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_startgame.click.assert_not_called()
+        self.mock_retrygame.click.assert_not_called()
 
 
 if __name__ == '__main__':
