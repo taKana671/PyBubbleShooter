@@ -188,13 +188,13 @@ class Shooter:
         self.colors_count = len(self.bubbles)
         self.is_increase = False
         self.next_bullet = None
+        self.launcher_angle = 90
         self.create_bubbles(10)
         self.charge()
         self.status = Status.READY
 
     def create_launcher(self):
         self.launcher = Point(WINDOW.half_width, WINDOW.height)
-        self.launcher_angle = 90
         self.radius = self.get_radius(WINDOW.half_width, WINDOW.height)
         self.limit_angle = round_up(
             self.calculate_angle(WINDOW.height, WINDOW.half_width))
@@ -962,20 +962,22 @@ def main():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == bubble_event:
-                bubble_shooter.increase()
             if event.type == MOUSEBUTTONDOWN and event.button == 1:
                 if bubble_shooter.game == Status.START:
                     start_game.click(*event.pos)
                 if bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
                     retry_game.click(*event.pos)
-            if event.type == KEYDOWN:
-                if event.key == K_RIGHT:
-                    bubble_shooter.move_right()
-                if event.key == K_LEFT:
-                    bubble_shooter.move_left()
-                if event.key == K_SPACE:
-                    bubble_shooter.shoot()
+            if bubble_shooter.game == Status.PLAY:
+                if event.type == bubble_event:
+                    bubble_shooter.increase()
+                if event.type == KEYDOWN:
+                    if event.key == K_RIGHT:
+                        bubble_shooter.move_right()
+                    if event.key == K_LEFT:
+                        bubble_shooter.move_left()
+                    if event.key == K_SPACE:
+                        bubble_shooter.shoot()
+
         pygame.display.update()
 
 
