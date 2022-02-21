@@ -48,6 +48,14 @@ class ShooterBasicTest(TestCase):
         return mock.create_autospec(
             spec=Cell, spec_set=True, instance=True, row=row, col=col, bubble=bubble)
 
+    def check_not_called(self, *methods):
+        for method in methods:
+            method.assert_not_called()
+
+    def check_called_once(self, *methods):
+        for method in methods:
+            method.assert_called_once()
+
 
 class ChargeTestCase(ShooterBasicTest):
     """tests for charge method
@@ -174,31 +182,38 @@ class IsCrossingTestCase(ShooterBasicTest):
                 self.assertEqual(result, expect)
 
     def test_is_crossing_false(self):
-        """Test that is_crossing returns False
-           if no lines intersect line segment pt1pt2.
+        """Test that is_crossing returns False if no lines intersect line segment pt1pt2,
+           and returns True if at least one line intersects line segment pt1pt2.
         """
         mock_cell = self.get_cell()
-
+        tests = [
+            ([False for _ in range(4)], False),
+            ([False, True], True)
+        ]
         with mock.patch('pybubble_shooter.Shooter._is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [False for _ in range(4)]
-            result = self.shooter.is_crossing(Point(0, 1), Point(1, 0), mock_cell)
-            self.assertEqual(result, False)
-
-    def test_is_crossing_true(self):
-        """Test that is_crossing returns True
-           if at least one line intersects line segment pt1pt2.
-        """
-        mock_cell = self.get_cell()
-
-        with mock.patch('pybubble_shooter.Shooter._is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [False, True]
-            result = self.shooter.is_crossing(Point(0, 1), Point(1, 0), mock_cell)
-            self.assertEqual(result, True)
+            for side_effect, expect in tests:
+                with self.subTest():
+                    mock_is_crossing.side_effect = side_effect
+                    result = self.shooter.is_crossing(Point(0, 1), Point(1, 0), mock_cell)
+                    self.assertEqual(result, expect)
 
 
 class FindDestinationTestCase(ShooterBasicTest):
     """tests for find_destination methods
     """
+
+    def run_test_of_trace(self, cells, start, end, expects, side_effect):
+        """Run a test of _trace method.
+        """
+        with mock.patch.object(self.shooter, 'cells', cells), \
+                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
+            mock_is_crossing.side_effect = side_effect
+            traced = [cell for cell in self.shooter._trace(start, end)]
+
+            self.assertEqual(len(traced), len(expects))
+            for cell, expect in zip(traced, expects):
+                with self.subTest():
+                    self.assertEqual((cell.row, cell.col), expect)
 
     def test_trace_start_x(self):
         """Test _trace method when start.x >= end.x.
@@ -206,19 +221,12 @@ class FindDestinationTestCase(ShooterBasicTest):
         cells = [[self.get_cells(r, c, None) for c in range(5)] for r in range(3)]
         start, end = Point(263, 600), Point(0, 400)
         expects = [(2, 1), (1, 0), (0, 0)]
-
-        with mock.patch.object(self.shooter, 'cells', cells), \
-                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [
-                False, True, True, False, False,
-                True, True, False, False, False,
-                True, False, False, False, False]
-
-            traced = [cell for cell in self.shooter._trace(start, end)]
-            self.assertEqual(len(traced), len(expects))
-            for cell, expect in zip(traced, expects):
-                with self.subTest():
-                    self.assertEqual((cell.row, cell.col), expect)
+        side_effect = [
+            False, True, True, False, False,
+            True, True, False, False, False,
+            True, False, False, False, False
+        ]
+        self.run_test_of_trace(cells, start, end, expects, side_effect)
 
     def test_trace_end_x(self):
         """Test _trace method when start.x < end.x.
@@ -226,19 +234,12 @@ class FindDestinationTestCase(ShooterBasicTest):
         cells = [[self.get_cells(r, c, None) for c in range(5)] for r in range(3)]
         start, end = Point(0, 600), Point(400, 0)
         expects = [(2, 2), (1, 3), (0, 4)]
-
-        with mock.patch.object(self.shooter, 'cells', cells), \
-                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [
-                False, False, True, True, False,
-                False, True, True, False, False,
-                True, False, False, False, False]
-
-            traced = [cell for cell in self.shooter._trace(start, end)]
-            self.assertEqual(len(traced), len(expects))
-            for cell, expect in zip(traced, expects):
-                with self.subTest():
-                    self.assertEqual((cell.row, cell.col), expect)
+        side_effect = [
+            False, False, True, True, False,
+            False, True, True, False, False,
+            True, False, False, False, False
+        ]
+        self.run_test_of_trace(cells, start, end, expects, side_effect)
 
     def test_trace_no_empty(self):
         """Test _trace method when all of the cells have bubble.
@@ -247,19 +248,12 @@ class FindDestinationTestCase(ShooterBasicTest):
         cells = [[self.get_cells(r, c, bubble) for c in range(5)] for r in range(3)]
         start, end = Point(0, 600), Point(400, 0)
         expects = [(2, 2)]
-
-        with mock.patch.object(self.shooter, 'cells', cells), \
-                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [
-                False, False, True, True, False,
-                False, True, True, False, False,
-                True, False, False, False, False]
-
-            traced = [cell for cell in self.shooter._trace(start, end)]
-            self.assertEqual(len(traced), len(expects))
-            for cell, expect in zip(traced, expects):
-                with self.subTest():
-                    self.assertEqual((cell.row, cell.col), expect)
+        side_effect = [
+            False, False, True, True, False,
+            False, True, True, False, False,
+            True, False, False, False, False
+        ]
+        self.run_test_of_trace(cells, start, end, expects, side_effect)
 
     def test_trace_target(self):
         """Test _trace method when target is found.
@@ -268,19 +262,12 @@ class FindDestinationTestCase(ShooterBasicTest):
         cells = [[self.get_cells(r, c, bubble if r <= 1 else None) for c in range(5)] for r in range(3)]
         start, end = Point(263, 600), Point(0, 400)
         expects = [(2, 1), (1, 0)]
-
-        with mock.patch.object(self.shooter, 'cells', cells), \
-                mock.patch('pybubble_shooter.Shooter.is_crossing') as mock_is_crossing:
-            mock_is_crossing.side_effect = [
-                False, True, True, False, False,
-                True, True, False, False, False,
-                True, False, False, False, False]
-
-            traced = [cell for cell in self.shooter._trace(start, end)]
-            self.assertEqual(len(traced), len(expects))
-            for cell, expect in zip(traced, expects):
-                with self.subTest():
-                    self.assertEqual((cell.row, cell.col), expect)
+        side_effect = [
+            False, True, True, False, False,
+            True, True, False, False, False,
+            True, False, False, False, False
+        ]
+        self.run_test_of_trace(cells, start, end, expects, side_effect)
 
     def test_scan_bubbles(self):
         """Test scan_bubbles method.
@@ -685,8 +672,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
         with mock.patch.object(self.shooter, 'status', Status.WIN), \
                 mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
             self.shooter.quit_game()
-            mock_set_timer.assert_called_once()
-            self.shooter.fanfare.play.assert_called_once()
+            self.check_called_once(mock_set_timer, self.shooter.fanfare.play)
             self.assertEqual(self.shooter.game, Status.WIN)
 
     def test_quit_game_gameover(self):
@@ -697,8 +683,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
         with mock.patch.object(self.shooter, 'status', Status.GAMEOVER), \
                 mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
             self.shooter.quit_game()
-            mock_set_timer.assert_not_called()
-            self.shooter.fanfare.play.assert_not_called()
+            self.check_not_called(mock_set_timer, self.shooter.fanfare.play)
             self.assertEqual(self.shooter.game, Status.GAMEOVER)
 
     def test_quit_game_dropping_group(self):
@@ -710,8 +695,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'game', Status.PLAY), \
                 mock.patch('pybubble_shooter.Shooter.set_timer') as mock_set_timer:
             self.shooter.quit_game()
-            mock_set_timer.assert_not_called()
-            self.shooter.fanfare.play.assert_not_called()
+            self.check_not_called(mock_set_timer, self.shooter.fanfare.play)
             self.assertEqual(self.shooter.game, Status.PLAY)
 
     def test_count_bubbles(self):
@@ -744,13 +728,10 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'dest', dest), \
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
-            self.mock_draw_setting.assert_called_once()
+            self.check_called_once(self.mock_draw_setting, mock_quit_game)
+            self.check_not_called(self.mock_charge, self.mock_simulate_shoot_left, self.mock_simulate_shoot_top)
             self.assertEqual(self.shooter.status, Status.WIN)
-            mock_quit_game.assert_called_once()
             self.assertEqual(self.mock_draw_line.call_count, 2)
-            self.mock_charge.assert_not_called()
-            self.mock_simulate_shoot_left.assert_not_called()
-            self.mock_simulate_shoot_top.assert_not_called()
 
     @mock.patch('pybubble_shooter.Shooter.quit_game')
     def test_update_gameover(self, mock_quit_game):
@@ -771,13 +752,10 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'dest', dest), \
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
-            self.mock_draw_setting.assert_called_once()
+            self.check_called_once(self.mock_draw_setting, mock_quit_game)
+            self.check_not_called(self.mock_simulate_shoot_right, self.mock_simulate_shoot_top, self.mock_charge)
             self.assertEqual(self.shooter.status, Status.GAMEOVER)
-            mock_quit_game.assert_called_once()
             self.assertEqual(self.mock_draw_line.call_count, 2)
-            self.mock_simulate_shoot_right.assert_not_called()
-            self.mock_simulate_shoot_top.assert_not_called()
-            self.mock_charge.assert_not_called()
 
     def test_update_less_than_20_bubbles(self):
         """Test update when the number of bubbles is less than 20 and
@@ -799,12 +777,9 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
             self.assertEqual(self.shooter.status, Status.READY)
-            self.mock_draw_line.assert_called_once()
-            self.mock_simulate_shoot_left.assert_not_called()
-            self.mock_simulate_shoot_right.assert_not_called()
-            self.mock_charge.assert_not_called()
-            self.mock_change_bubbles.assert_called_once()
-            self.mock_increase_bubbles.assert_not_called()
+            self.check_called_once(self.mock_draw_line, self.mock_change_bubbles)
+            self.check_not_called(self.mock_simulate_shoot_left, self.mock_simulate_shoot_right,
+                                  self.mock_charge, self.mock_increase_bubbles)
 
     def test_update_more_than_20_bubbles(self):
         """Test update when the number of bubbles is more than 20 and
@@ -825,11 +800,9 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
             self.assertEqual(self.shooter.status, Status.READY)
-            self.mock_draw_line.assert_not_called()
-            self.mock_charge.assert_not_called()
-            self.mock_change_bubbles.assert_not_called()
-            self.mock_increase_bubbles.assert_called_once()
             self.assertEqual(self.shooter.is_increase, False)
+            self.mock_increase_bubbles.assert_called_once()
+            self.check_not_called(self.mock_draw_line, self.mock_charge, self.mock_change_bubbles)
 
     def test_update_charge(self):
         """Test update method when status is CHARGE.
@@ -851,9 +824,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter, 'is_increase', True), \
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
-            self.mock_charge.assert_not_called()
-            self.mock_change_bubbles.assert_not_called()
-            self.mock_increase_bubbles.assert_not_called()
+            self.check_not_called(self.mock_charge, self.mock_change_bubbles, self.mock_increase_bubbles)
             self.assertEqual(self.shooter.is_increase, True)
 
 
