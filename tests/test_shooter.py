@@ -828,5 +828,63 @@ class UpdateMethodsTestCase(ShooterBasicTest):
             self.assertEqual(self.shooter.is_increase, True)
 
 
+class MethodsCalledByKeyEventTestCase(ShooterBasicTest):
+    """tests for methods called by key event in main function
+    """
+
+    def test_move_left(self):
+        """Test move_left method.
+        """
+        expects = [174, 175]
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 172):
+            for expect in expects:
+                with self.subTest(expect):
+                    self.shooter.move_left()
+                    self.assertEqual(self.shooter.launcher_angle, expect)
+
+    def test_move_right(self):
+        """Test move_right method.
+        """
+        expects = [6, 5]
+
+        with mock.patch.object(self.shooter, 'launcher_angle', 8):
+            for expect in expects:
+                with self.subTest(expect):
+                    self.shooter.move_right()
+                    self.assertEqual(self.shooter.launcher_angle, expect)
+
+    def test_shoot(self):
+        """Test shoot method when shooter status is READY and
+           dest is not None.
+        """
+        with mock.patch.object(self.shooter, 'status', Status.READY), \
+                mock.patch.object(self.shooter, 'dest', self.get_cell()):
+            self.shooter.shoot()
+            self.assertEqual(self.shooter.status, Status.SHOT)
+            self.shooter.bullet.shoot.assert_called_once()
+
+    def test_not_shoot(self):
+        """Test shoot method when shooter status is not READY or
+           dest is None.
+        """
+        tests = [(Status.READY, None), (Status.START, None), (Status.START, self.get_cell())]
+
+        for status, dest in tests:
+            with self.subTest():
+                with mock.patch.object(self.shooter, 'status', status), \
+                        mock.patch.object(self.shooter, 'dest', dest):
+                    self.shooter.shoot()
+                    self.assertEqual(self.shooter.status, status)
+                    self.shooter.bullet.shoot.assert_not_called()
+
+    def test_increase(self):
+        """Test increase method.
+           The default of is_isincrase is False.
+        """
+        self.shooter.increase()
+        self.assertEqual(self.shooter.is_increase, True)
+
+
 if __name__ == '__main__':
     main()
