@@ -757,7 +757,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
             self.assertEqual(self.shooter.status, Status.GAMEOVER)
             self.assertEqual(self.mock_draw_line.call_count, 2)
 
-    def test_update_less_than_20_bubbles(self):
+    def test_update_less_than_10_bubbles(self):
         """Test update when the number of bubbles is less than 20 and
            launcher is turned to the top.
         """
@@ -765,7 +765,7 @@ class UpdateMethodsTestCase(ShooterBasicTest):
             yield Line(Point(1, 1), Point(2, 2))
 
         dest = self.get_cell()
-        cells = [[self.get_cells(r, c, object() if r == 0 else None)
+        cells = [[self.get_cells(r, c, object() if r == 0 and c < 10 else None)
                   for c in range(COLS)] for r in range(ROWS)]
         self.mock_simulate_shoot_top.return_value = simulate_shoot_top()
         self.mock_calc_height.return_value = 200
@@ -774,10 +774,12 @@ class UpdateMethodsTestCase(ShooterBasicTest):
                 mock.patch.object(self.shooter.bullet, 'status', Status.STAY, create=True), \
                 mock.patch.object(self.shooter, 'cells', cells), \
                 mock.patch.object(self.shooter, 'dest', dest), \
+                mock.patch.object(self.shooter, 'is_decrease', True), \
                 mock.patch.object(self.shooter, 'game', Status.PLAY):
             self.shooter.update()
             self.assertEqual(self.shooter.status, Status.READY)
             self.check_called_once(self.mock_draw_line, self.mock_change_bubbles)
+            self.assertEqual(self.shooter.is_decrease, False)
             self.check_not_called(self.mock_simulate_shoot_left, self.mock_simulate_shoot_right,
                                   self.mock_charge, self.mock_increase_bubbles)
 

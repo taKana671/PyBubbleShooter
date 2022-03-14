@@ -295,6 +295,16 @@ class MainTestCase(TestCase):
 
         self.mock_shooter.increase.assert_called_once()
 
+    def test_original_event_decrease(self):
+        """Test that Shooter.increase is called when shooter.game status
+           is PLAY and even.type is pygame.USEREVENT + 1.
+        """
+        self.set_dummy_event(
+            dict(type=pygame.USEREVENT + 2), dict(type=QUIT))
+        self.run_main(Status.PLAY)
+
+        self.mock_shooter.decrease_colors.assert_called_once()
+
     def test_event_type_kright(self):
         """Test that Shooter.increase is called when shooter.game status
            is PLAY and even.key is K_RIGHT.
