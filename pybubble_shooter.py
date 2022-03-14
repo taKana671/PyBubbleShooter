@@ -187,6 +187,7 @@ class Shooter:
         self.bubbles = BUBBLES[:]
         self.colors_count = len(self.bubbles)
         self.is_increase = False
+        self.is_decrease = False
         self.next_bullet = None
         self.launcher_angle = 90
         self.create_bubbles(10)
@@ -347,14 +348,13 @@ class Shooter:
             self.draw_setting()
 
             if self.status == Status.READY:
-                count = self.count_bubbles()
-
-                if not count:
+                if not (count := self.count_bubbles()):
                     self.status = Status.WIN
                 else:
                     if self.bullet.status == Status.STAY:
-                        if count <= 20:
+                        if self.is_decrease and count <= 10:
                             self.change_bubbles()
+                            self.is_decrease = False
                         if self.is_increase:
                             self.increase_bubbles(4)
                             self.is_increase = False
@@ -577,6 +577,9 @@ class Shooter:
 
     def increase(self):
         self.is_increase = True
+
+    def decrease_colors(self):
+        self.is_decrease = True
 
     def increase_bubbles(self, rows):
         for cells in self.cells[::-1]:
@@ -935,9 +938,10 @@ def main():
 
     clock = pygame.time.Clock()
 
-    bubble_event = pygame.USEREVENT + 1
-    # pygame.time.set_timer(bubble_event, 15000)
-    pygame.time.set_timer(bubble_event, 60000 * 3)
+    increase_event = pygame.USEREVENT + 1
+    pygame.time.set_timer(increase_event, 60000 * 2)
+    change_event = pygame.USEREVENT + 2
+    pygame.time.set_timer(change_event, 30000)
     pygame.key.set_repeat(100, 100)
 
     while True:
@@ -968,7 +972,9 @@ def main():
                 if bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
                     retry_game.click(*event.pos)
             if bubble_shooter.game == Status.PLAY:
-                if event.type == bubble_event:
+                if event.type == change_event:
+                    bubble_shooter.decrease_colors()
+                if event.type == increase_event:
                     bubble_shooter.increase()
                 if event.type == KEYDOWN:
                     if event.key == K_RIGHT:
