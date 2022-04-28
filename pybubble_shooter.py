@@ -915,77 +915,79 @@ class StartGame(StartButton):
             self.shooter.game = Status.PLAY
 
 
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode(SCREEN.size)
-    pygame.display.set_caption('PyBubbleShooter')
+class Game:
 
-    bubbles = pygame.sprite.RenderUpdates()
-    droppings = pygame.sprite.RenderUpdates()
-    start = pygame.sprite.RenderUpdates()
-    retry = pygame.sprite.RenderUpdates()
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode(SCREEN.size)
+        pygame.display.set_caption('PyBubbleShooter')
+        self.bubbles = pygame.sprite.RenderUpdates()
+        self.droppings = pygame.sprite.RenderUpdates()
+        self.start = pygame.sprite.RenderUpdates()
+        self.retry = pygame.sprite.RenderUpdates()
+        Bubble.containers = self.bubbles
+        Bullet.containers = self.bubbles
+        StartGame.containers = self.start
+        RetryGame.containers = self.retry
+        self.score = Score(self.screen)
+        self.bubble_shooter = Shooter(self.screen, self.score, self.droppings)
+        self.start_game = StartGame(ImageFiles.BUTTON_START.path, self.screen, self.bubble_shooter)
+        self.retry_game = RetryGame(ImageFiles.BUTTON_START.path, self.screen, self.bubble_shooter)
 
-    Bubble.containers = bubbles
-    Bullet.containers = bubbles
-    StartGame.containers = start
-    RetryGame.containers = retry
+    def set_timer(self):
+        self.increase_event = pygame.USEREVENT + 1
+        pygame.time.set_timer(self.increase_event, 60000 * 2)
+        self.change_event = pygame.USEREVENT + 2
+        pygame.time.set_timer(self.change_event, 30000)
+        pygame.key.set_repeat(100, 100)
 
-    score = Score(screen)
-    bubble_shooter = Shooter(screen, score, droppings)
+    def run(self):
+        clock = pygame.time.Clock()
+        self.set_timer()
 
-    start_game = StartGame(ImageFiles.BUTTON_START.path, screen, bubble_shooter)
-    retry_game = RetryGame(ImageFiles.BUTTON_START.path, screen, bubble_shooter)
+        while True:
+            clock.tick(60)
+            self.screen.fill(Colors.GREEN.color_code)
 
-    clock = pygame.time.Clock()
+            self.bubble_shooter.update()
+            self.bubbles.update()
+            self.bubbles.draw(self.screen)
 
-    increase_event = pygame.USEREVENT + 1
-    pygame.time.set_timer(increase_event, 60000 * 2)
-    change_event = pygame.USEREVENT + 2
-    pygame.time.set_timer(change_event, 30000)
-    pygame.key.set_repeat(100, 100)
+            if self.bubble_shooter.game == Status.START:
+                self.start.update()
+                self.start.draw(self.screen)
+            elif self.bubble_shooter.game == Status.PLAY:
+                self.droppings.draw(self.screen)
+                self.score.update()
+            elif self.bubble_shooter.game in (Status.GAMEOVER, Status.WIN):
+                self.retry.update()
+                self.retry.draw(self.screen)
 
-    while True:
-        clock.tick(60)
-        screen.fill(Colors.GREEN.color_code)
+            for event in pygame.event.get():
+                if event.type == QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == MOUSEBUTTONDOWN and event.button == 1:
+                    if self.bubble_shooter.game == Status.START:
+                        self.start_game.click(*event.pos)
+                    if self.bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
+                        self.retry_game.click(*event.pos)
+                if self.bubble_shooter.game == Status.PLAY:
+                    if event.type == self.change_event:
+                        self.bubble_shooter.decrease_colors()
+                    if event.type == self.increase_event:
+                        self.bubble_shooter.increase()
+                    if event.type == KEYDOWN:
+                        if event.key == K_RIGHT:
+                            self.bubble_shooter.move_right()
+                        if event.key == K_LEFT:
+                            self.bubble_shooter.move_left()
+                        if event.key == K_SPACE:
+                            self.bubble_shooter.shoot()
 
-        bubble_shooter.update()
-        bubbles.update()
-        bubbles.draw(screen)
-
-        if bubble_shooter.game == Status.START:
-            start.update()
-            start.draw(screen)
-        elif bubble_shooter.game == Status.PLAY:
-            droppings.draw(screen)
-            score.update()
-        elif bubble_shooter.game in (Status.GAMEOVER, Status.WIN):
-            retry.update()
-            retry.draw(screen)
-
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == MOUSEBUTTONDOWN and event.button == 1:
-                if bubble_shooter.game == Status.START:
-                    start_game.click(*event.pos)
-                if bubble_shooter.game in (Status.WIN, Status.GAMEOVER):
-                    retry_game.click(*event.pos)
-            if bubble_shooter.game == Status.PLAY:
-                if event.type == change_event:
-                    bubble_shooter.decrease_colors()
-                if event.type == increase_event:
-                    bubble_shooter.increase()
-                if event.type == KEYDOWN:
-                    if event.key == K_RIGHT:
-                        bubble_shooter.move_right()
-                    if event.key == K_LEFT:
-                        bubble_shooter.move_left()
-                    if event.key == K_SPACE:
-                        bubble_shooter.shoot()
-
-        pygame.display.update()
+            pygame.display.update()
 
 
 if __name__ == '__main__':
-    main()
+    game = Game()
+    game.run()

@@ -9,8 +9,7 @@ from unittest import TestCase, main, mock
 from pygame.locals import QUIT, MOUSEBUTTONDOWN, KEYDOWN, K_RIGHT, K_LEFT, K_SPACE
 
 from pybubble_shooter import (ImageFiles, SoundFiles, round_up, round, Cell,
-    Point, Line, Score, Status)
-from pybubble_shooter import main as pybubble_main
+    Point, Line, Score, Status, Game)
 
 
 class FilesTestCase(TestCase):
@@ -211,6 +210,7 @@ class MainTestCase(TestCase):
         self.retry = mock.MagicMock()
         mock_renderupdate = mock.patch("pygame.sprite.RenderUpdates").start()
         mock_renderupdate.side_effect = [self.bubbles, self.droppings, self.start, self.retry]
+        self.game = Game()
 
     def tearDown(self):
         mock.patch.stopall()
@@ -239,7 +239,7 @@ class MainTestCase(TestCase):
     def run_main(self, status):
         with mock.patch.object(self.mock_shooter, 'game', status, create=True):
             with self.assertRaises(SystemExit):
-                pybubble_main()
+                self.game.run()
 
     def test_games_tatus_start(self):
         """Test that start screen is updated when shooter.game status is START.
