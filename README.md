@@ -10,7 +10,7 @@ A python implementation of BubbleShooter Game
 * pygame 1.19.2
 
 # Environment
-* Wondows10
+* Windows10
 
 # Usage
 * Execute a command below on the command line.
