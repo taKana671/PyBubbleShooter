@@ -546,7 +546,7 @@ class Shooter:
                 yield self.cells[row - 1][col]
 
     def calculate_distance(self, pt1, pt2):
-        return ((pt2.x - pt1.x) ** 2 + (pt2.y - pt1.x) ** 2) ** 0.5
+        return ((pt2.x - pt1.x) ** 2 + (pt2.y - pt1.y) ** 2) ** 0.5
 
     def get_radius(self, bottom, height):
         return (bottom ** 2 + height ** 2) ** 0.5
